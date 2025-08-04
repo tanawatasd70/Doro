@@ -234,15 +234,22 @@ class AskQuestionModal(discord.ui.Modal):
 
 # 📌 View หลักที่มีปุ่ม และ Dropdown
 class AskQuestionView(discord.ui.View):
-    def __init__(self, guild):  # ✅ เพิ่ม guild เข้าไปใน parameter
+    def __init__(self, guild):
         super().__init__(timeout=None)
-        self.guild = guild  # ✅ เก็บไว้ใช้งานภายใน view
+        self.guild = guild
+
+        # 🔧 ตรวจสอบว่ามี options จริง
         self.select_choices = discord.ui.Select(
-            placeholder="🔘 เลือกชุดคำตอบ",
+            placeholder="เลือกคำตอบที่ต้องการ",
+            min_values=1,
+            max_values=1,
             options=[
-                discord.SelectOption(label="เอา / ไม่เอา / ไม่แน่ใจ", value="ชุด1"),
-                discord.SelectOption(label="ใช่ / ไม่ใช่ / ไม่รู้", value="ชุด2"),
-            ],
+                discord.SelectOption(label="เอา", value="accept"),
+                discord.SelectOption(label="ไม่เอา", value="reject"),
+                discord.SelectOption(label="ไม่แน่ใจ", value="unsure"),
+            ]
+        )
+        self.add_item(self.select_choices)
             custom_id="select_choices",
         )
         self.select_question_channel = discord.ui.Select(
@@ -461,6 +468,7 @@ async def on_message(message):
 
 server_on()
 bot.run(DISCORD_TOKEN)
+
 
 
 
