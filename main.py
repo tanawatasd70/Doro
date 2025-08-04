@@ -261,7 +261,8 @@ class AskQuestionView(discord.ui.View):
             await interaction.response.send_modal(modal)
             return False
 
-        if custom_id == "open_question_modal":
+if custom_id == "open_question_modal":
+    # เปิด modal ให้กรอกคำถาม
     choice_set_name = self.select_choices.values[0] if self.select_choices.values else None
     question_channel_id = int(self.select_question_channel.values[0]) if self.select_question_channel.values else None
     result_channel_id = int(self.select_result_channel.values[0]) if self.select_result_channel.values else None
@@ -271,7 +272,7 @@ class AskQuestionView(discord.ui.View):
         return False
 
     modal = AskQuestionModal(choice_set_name, question_channel_id, result_channel_id)
-    modal.view_ref = self  # ✅ เพิ่มบรรทัดนี้
+    modal.view_ref = self  # ✅ บรรทัดที่เพิ่ม
     await interaction.response.send_modal(modal)
     return False
 
@@ -539,4 +540,5 @@ async def on_message(message):
 
 server_on()
 bot.run(DISCORD_TOKEN)
+
 
