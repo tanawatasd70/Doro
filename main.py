@@ -236,6 +236,7 @@ class AskQuestionModal(discord.ui.Modal):
 class AskQuestionView(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=None)
+        self.guild = guild
         self.select_choices = discord.ui.Select(
             placeholder="🔘 เลือกชุดคำตอบ",
             options=[
@@ -460,6 +461,7 @@ async def on_message(message):
 
 server_on()
 bot.run(DISCORD_TOKEN)
+
 
 
 
