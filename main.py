@@ -36,7 +36,6 @@ ROLE_OPTIONS = [
     {"label": "เซียน", "value": "เซียน", "emoji": "🪛"},
 ]
 
-# Role classes
 
 class RoleSelect(discord.ui.Select):
     def __init__(self):
@@ -63,11 +62,14 @@ class RoleSelect(discord.ui.Select):
             and r["value"] not in selected_roles
         ]
         try:
-            await interaction.user.remove_roles(*roles_to_remove)
-            await interaction.user.add_roles(*selected_role_objs)
+            if roles_to_remove:
+                await interaction.user.remove_roles(*roles_to_remove)
+            if selected_role_objs:
+                await interaction.user.add_roles(*selected_role_objs)
             await interaction.response.send_message("✅ ยศของคุณถูกอัปเดตเรียบร้อยแล้ว", ephemeral=True)
         except discord.Forbidden:
             await interaction.response.send_message("❌ บอทไม่มีสิทธิ์จัดการยศ", ephemeral=True)
+
 
 class RemoveRolesButton(discord.ui.Button):
     def __init__(self):
@@ -80,16 +82,19 @@ class RemoveRolesButton(discord.ui.Button):
             if discord.utils.get(interaction.guild.roles, name=r["value"]) in interaction.user.roles
         ]
         try:
-            await interaction.user.remove_roles(*roles_to_remove)
+            if roles_to_remove:
+                await interaction.user.remove_roles(*roles_to_remove)
             await interaction.response.send_message("🧹 ยศของคุณถูกลบทั้งหมดแล้ว", ephemeral=True)
         except discord.Forbidden:
             await interaction.response.send_message("❌ บอทไม่มีสิทธิ์ลบยศ", ephemeral=True)
+
 
 class RoleView(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=None)
         self.add_item(RoleSelect())
         self.add_item(RemoveRolesButton())
+
 
 class RequestRoleButton(discord.ui.Button):
     def __init__(self):
@@ -98,11 +103,13 @@ class RequestRoleButton(discord.ui.Button):
     async def callback(self, interaction: discord.Interaction):
         await interaction.response.send_message("คุณกดปุ่มขอยศแล้ว!", ephemeral=True)
 
+
 class TextInputModal(discord.ui.Modal, title="กรอกเหตุผลขอยศ"):
     reason = discord.ui.TextInput(label="กรุณาใส่เหตุผลที่ต้องการขอยศ", style=discord.TextStyle.paragraph)
 
     async def on_submit(self, interaction: discord.Interaction):
         await interaction.response.send_message(f"ขอบคุณสำหรับเหตุผล: {self.reason}", ephemeral=True)
+
 
 class TextInputButton(discord.ui.Button):
     def __init__(self):
@@ -112,13 +119,15 @@ class TextInputButton(discord.ui.Button):
         modal = TextInputModal()
         await interaction.response.send_modal(modal)
 
+
 class RequestRoleView(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=None)
-        self.add_item(RoleSelect())  # เมนูเลือกยศ (เลือกหลายยศได้)
+        self.add_item(RoleSelect())
         self.add_item(RequestRoleButton())
         self.add_item(TextInputButton())
         self.add_item(RemoveRolesButton())
+
 
 QUESTION_CHOICES = {
     "เอา / ไม่เอา / ไม่แน่ใจ": ["เอา", "ไม่เอา", "ไม่แน่ใจ"],
@@ -126,84 +135,22 @@ QUESTION_CHOICES = {
     "ใช่ / ไม่ใช่": ["ใช่", "ไม่ใช่"],
 }
 
-# เก็บโหวต: message_id -> { user_id: answer, ... }
+
 vote_records = {}
 
-class AskQuestionModal(discord.ui.Modal, title="กรอกคำถาม"):
+
+# Modal ที่ใช้เพื่อกรอกข้อความคำถาม — เมื่อ submit จะเก็บไว้ที่ view (ไม่ส่งเอง)
+class AskQuestionTextModal(discord.ui.Modal, title="กรอกคำถาม"):
     question = discord.ui.TextInput(label="คำถามของคุณ", style=discord.TextStyle.paragraph)
 
-    def __init__(self, choice_set_name, question_channel_id, result_channel_id):
+    def __init__(self, parent_view):
         super().__init__()
-        self.choice_set_name = choice_set_name
-        self.question_channel_id = question_channel_id
-        self.result_channel_id = result_channel_id
+        self.parent_view = parent_view
 
     async def on_submit(self, interaction: discord.Interaction):
-        guild = interaction.guild
-        question_channel = guild.get_channel(self.question_channel_id)
-        result_channel = guild.get_channel(self.result_channel_id)
-
-        if question_channel is None or result_channel is None:
-            await interaction.response.send_message("❌ ไม่พบช่องเป้าหมายหรือช่องผลโหวต", ephemeral=True)
-            return
-
-        choices = QUESTION_CHOICES.get(self.choice_set_name)
-        if not choices:
-            await interaction.response.send_message("❌ ชุดคำตอบไม่ถูกต้อง", ephemeral=True)
-            return
-
-        embed = discord.Embed(
-            title="📢 คำถามจากผู้ดูแล",
-            description=self.question.value,
-            color=0xFFB6C1
-        )
-        embed.set_footer(text=f"เลือกตอบโดยใช้เมนูด้านล่าง | ชุดคำตอบ: {self.choice_set_name}")
-
-        class AnswerSelect(discord.ui.Select):
-            def __init__(self):
-                opts = [discord.SelectOption(label=opt) for opt in choices]
-                super().__init__(placeholder="โปรดเลือกคำตอบของคุณ", options=opts, min_values=1, max_values=1)
-
-            async def callback(self, interaction2: discord.Interaction):
-                user = interaction2.user
-                msg_id = interaction2.message.id
-                user_votes = vote_records.setdefault(msg_id, {})
-                user_votes[user.id] = self.values[0]
-
-                # สรุปผลโหวต
-                summary = {ans: [] for ans in choices}
-
-                for uid, ans in user_votes.items():
-                    member = guild.get_member(uid)
-                    if member:
-                        summary[ans].append(member.display_name)
-
-                # สร้างข้อความสรุป
-                summary_text = ""
-                for ans in choices:
-                    voters = summary[ans]
-                    summary_text += f"**{ans}**: {len(voters)} โหวต\n"
-                    if voters:
-                        summary_text += ", ".join(voters) + "\n"
-
-                # ส่งสรุปไปช่องผลโหวต
-                await result_channel.send(
-                    embed=discord.Embed(
-                        title="📊 ผลโหวตล่าสุด",
-                        description=summary_text,
-                        color=0x87CEEB
-                    )
-                )
-
-                await interaction2.response.send_message(f"คุณเลือก: {self.values[0]}", ephemeral=True)
-
-        view = discord.ui.View()
-        view.add_item(AnswerSelect())
-
-        sent_msg = await question_channel.send(embed=embed, view=view)
-        vote_records[sent_msg.id] = {}  # เตรียมเก็บโหวต
-
-        await interaction.response.send_message(f"ส่งคำถามไปที่ช่อง {question_channel.mention} เรียบร้อยแล้ว\nสรุปผลโหวตที่ช่อง {result_channel.mention}", ephemeral=True)
+        # เก็บคำถามลงใน view เพื่อให้ปุ่มยืนยัน (Submit) ส่งจริง
+        self.parent_view.question_text = self.question.value
+        await interaction.response.send_message("✏️ บันทึกคำถามเรียบร้อยแล้ว", ephemeral=True)
 
 
 def disable_all_items(view: discord.ui.View):
@@ -211,12 +158,32 @@ def disable_all_items(view: discord.ui.View):
         item.disabled = True
 
 
-# View สำหรับถามคำถามและส่งโหวต
+# ปุ่มเปิด modal เพื่อกรอกคำถาม
+class OpenQuestionModalButton(discord.ui.Button):
+    def __init__(self, parent_view):
+        super().__init__(label="📝 กรอกคำถาม", style=discord.ButtonStyle.primary)
+        self.parent_view = parent_view
+
+    async def callback(self, interaction: discord.Interaction):
+        modal = AskQuestionTextModal(self.parent_view)
+        await interaction.response.send_modal(modal)
+
+
+# ปุ่มยืนยันส่งคำถาม (มี callback จริง)
+class SubmitQuestionButton(discord.ui.Button):
+    def __init__(self, parent_view):
+        super().__init__(label="✅ ยืนยันส่งคำถาม", style=discord.ButtonStyle.success)
+        self.parent_view = parent_view
+
+    async def callback(self, interaction: discord.Interaction):
+        await self.parent_view.submit_question(interaction)
+
+
 class AskQuestionView(discord.ui.View):
     def __init__(self, guild):
         super().__init__(timeout=None)
         self.guild = guild
-        self.question_text = None  # เก็บคำถามที่กรอก
+        self.question_text = None  # เก็บคำถามที่กรอกโดย modal
 
         # ชุดคำตอบที่เลือก
         self.select_choices = discord.ui.Select(
@@ -251,99 +218,89 @@ class AskQuestionView(discord.ui.View):
         )
         self.add_item(self.select_result_channel)
 
-        # ปุ่มเปิด modal กรอกคำถาม
-        self.add_item(discord.ui.Button(label="📝 กรอกคำถาม", style=discord.ButtonStyle.primary, custom_id="open_question_modal"))
+        # ปุ่มเปิด modal (มี callback จริง)
+        self.add_item(OpenQuestionModalButton(self))
 
-        # ปุ่มส่งคำถาม
-        self.add_item(discord.ui.Button(label="✅ ยืนยันส่งคำถาม", style=discord.ButtonStyle.success, custom_id="submit_question"))
+        # ปุ่มส่งคำถาม (มี callback จริง)
+        self.add_item(SubmitQuestionButton(self))
 
-    async def interaction_check(self, interaction: discord.Interaction) -> bool:
-        custom_id = interaction.data.get("custom_id")
+    async def submit_question(self, interaction: discord.Interaction):
+        # ตรวจสอบว่ามีข้อความคำถามหรือยัง
+        if not self.question_text:
+            await interaction.response.send_message("❗ กรุณากรอกคำถามก่อนผ่านปุ่ม 'กรอกคำถาม'", ephemeral=True)
+            return
 
-        if custom_id == "open_question_modal":
-            # เปิด modal เพื่อกรอกคำถาม
-            modal = AskQuestionModal(
-                choice_set_name=self.select_choices.values[0] if self.select_choices.values else None,
-                question_channel_id=int(self.select_question_channel.values[0]) if self.select_question_channel.values else None,
-                result_channel_id=int(self.select_result_channel.values[0]) if self.select_result_channel.values else None,
-            )
-            modal.view_ref = self  # ให้ modal อ้างอิง view นี้
-            await interaction.response.send_modal(modal)
-            return False
+        # ดึงค่าต่าง ๆ
+        choice_set_name = self.select_choices.values[0] if self.select_choices.values else None
+        question_channel_id = int(self.select_question_channel.values[0]) if self.select_question_channel.values else None
+        result_channel_id = int(self.select_result_channel.values[0]) if self.select_result_channel.values else None
 
-        if custom_id == "submit_question":
-            if not self.question_text:
-                await interaction.response.send_message("❗ กรุณากรอกคำถามก่อนผ่านปุ่ม 'กรอกคำถาม'", ephemeral=True)
-                return False
+        guild = self.guild
+        question_channel = guild.get_channel(question_channel_id) if question_channel_id else None
+        result_channel = guild.get_channel(result_channel_id) if result_channel_id else None
 
-            choice_set_name = self.select_choices.values[0] if self.select_choices.values else None
-            question_channel_id = int(self.select_question_channel.values[0]) if self.select_question_channel.values else None
-            result_channel_id = int(self.select_result_channel.values[0]) if self.select_result_channel.values else None
+        if not (choice_set_name and question_channel and result_channel):
+            await interaction.response.send_message("❗ กรุณาเลือกชุดคำตอบ ช่องส่งคำถาม และช่องสรุปผลโหวตก่อน", ephemeral=True)
+            return
 
-            guild = interaction.guild
-            question_channel = guild.get_channel(question_channel_id)
-            result_channel = guild.get_channel(result_channel_id)
+        choices = QUESTION_CHOICES.get(choice_set_name)
+        if not choices:
+            await interaction.response.send_message("❌ ชุดคำตอบไม่ถูกต้อง", ephemeral=True)
+            return
 
-            if not (choice_set_name and question_channel and result_channel):
-                await interaction.response.send_message("❗ กรุณาเลือกชุดคำตอบ ช่องส่งคำถาม และช่องสรุปผลโหวตก่อน", ephemeral=True)
-                return False
+        embed = discord.Embed(
+            title="📢 คำถามสำหรับทุกคน",
+            description=self.question_text,
+            color=discord.Color.pink()
+        )
 
-            choices = QUESTION_CHOICES.get(choice_set_name)
-            if not choices:
-                await interaction.response.send_message("❌ ชุดคำตอบไม่ถูกต้อง", ephemeral=True)
-                return False
+        # Vote select ที่จะถูกแนบกับข้อความคำถาม
+        class VoteSelect(discord.ui.Select):
+            def __init__(self):
+                opts = [discord.SelectOption(label=opt) for opt in choices]
+                super().__init__(placeholder="โปรดเลือกคำตอบของคุณ", options=opts, min_values=1, max_values=1)
 
-            embed = discord.Embed(
-                title="📢 คำถามสำหรับทุกคน",
-                description=self.question_text,
-                color=discord.Color.pink()
-            )
+            async def callback(self, interaction2: discord.Interaction):
+                user = interaction2.user
+                msg_id = interaction2.message.id
+                user_votes = vote_records.setdefault(msg_id, {})
+                user_votes[user.id] = self.values[0]
 
-            class VoteSelect(discord.ui.Select):
-                def __init__(self):
-                    opts = [discord.SelectOption(label=opt) for opt in choices]
-                    super().__init__(placeholder="โปรดเลือกคำตอบของคุณ", options=opts, min_values=1, max_values=1)
+                # สรุปผลโหวต
+                summary = {ans: [] for ans in choices}
 
-                async def callback(self, interaction2: discord.Interaction):
-                    user = interaction2.user
-                    msg_id = interaction2.message.id
-                    user_votes = vote_records.setdefault(msg_id, {})
-                    user_votes[user.id] = self.values[0]
+                for uid, ans in user_votes.items():
+                    member = guild.get_member(uid)
+                    if member:
+                        summary[ans].append(member.display_name)
 
-                    # สรุปผลโหวต
-                    summary = {ans: [] for ans in choices}
+                summary_text = ""
+                for ans in choices:
+                    voters = summary[ans]
+                    summary_text += f"**{ans}**: {len(voters)} โหวต\n"
+                    if voters:
+                        summary_text += ", ".join(voters) + "\n"
 
-                    for uid, ans in user_votes.items():
-                        member = guild.get_member(uid)
-                        if member:
-                            summary[ans].append(member.display_name)
-
-                    summary_text = ""
-                    for ans in choices:
-                        voters = summary[ans]
-                        summary_text += f"**{ans}**: {len(voters)} โหวต\n"
-                        if voters:
-                            summary_text += ", ".join(voters) + "\n"
-
-                    await result_channel.send(
-                        embed=discord.Embed(
-                            title="📊 ผลโหวตล่าสุด",
-                            description=summary_text,
-                            color=0x87CEEB
-                        )
+                await result_channel.send(
+                    embed=discord.Embed(
+                        title="📊 ผลโหวตล่าสุด",
+                        description=summary_text,
+                        color=0x87CEEB
                     )
-                    await interaction2.response.send_message(f"คุณเลือก: {self.values[0]}", ephemeral=True)
+                )
+                await interaction2.response.send_message(f"คุณเลือก: {self.values[0]}", ephemeral=True)
 
-            view = discord.ui.View()
-            view.add_item(VoteSelect())
+        view = discord.ui.View()
+        view.add_item(VoteSelect())
 
-            sent_msg = await question_channel.send(embed=embed, view=view)
-            vote_records[sent_msg.id] = {}
+        sent_msg = await question_channel.send(embed=embed, view=view)
+        vote_records[sent_msg.id] = {}
 
-            await interaction.response.send_message(f"✅ ส่งคำถามไปที่ {question_channel.mention} เรียบร้อยแล้ว\nสรุปผลโหวตที่ช่อง {result_channel.mention}", ephemeral=True)
-            return False
+        # ตอบกลับผู้กดปุ่มยืนยัน (ผู้สร้างคำถาม)
+        await interaction.response.send_message(f"✅ ส่งคำถามไปที่ {question_channel.mention} เรียบร้อยแล้ว\nสรุปผลโหวตที่ช่อง {result_channel.mention}", ephemeral=True)
 
-        return True
+        # หากต้องการ เคลียร์คำถามใน view เพื่อส่งใหม่ครั้งถัดไป (ไม่บังคับ)
+        self.question_text = None
 
 
 @bot.event
@@ -480,7 +437,6 @@ async def on_message(message):
         await message.channel.send(custom_responses[lower_msg])
         return
 
-    # บันทึกบริบทผู้ใช้
     if user_id not in user_contexts:
         user_contexts[user_id] = []
     user_contexts[user_id].append((user_id, username, msg))
