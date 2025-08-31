@@ -204,7 +204,9 @@ class VoteSelect(discord.ui.Select):
             if voters:
                 summary_text += ", ".join(voters) + "\n"
 
-        result_channel_id = interaction2.message.channel.id # Assuming result channel is the same
+        # The following line assumes the result channel is the same as the question channel.
+        # This can be improved by storing the result channel ID in the embed or the vote_records dictionary.
+        result_channel_id = interaction2.message.channel.id
         result_channel = guild.get_channel(result_channel_id)
         if result_channel:
             await result_channel.send(
@@ -236,7 +238,7 @@ class AskQuestionView(discord.ui.View):
         )
         self.add_item(self.select_choices)
 
-        # Select menu for poll channel
+        # สร้าง Select Menu สำหรับเลือกช่องส่งคำถาม
         channels = [c for c in guild.channels if isinstance(c, discord.TextChannel)]
         channel_options = [discord.SelectOption(label=ch.name, value=str(ch.id)) for ch in channels]
         self.select_question_channel = discord.ui.Select(
@@ -246,7 +248,7 @@ class AskQuestionView(discord.ui.View):
         )
         self.add_item(self.select_question_channel)
 
-        # Select menu for result channel
+        # สร้าง Select Menu สำหรับเลือกช่องสรุปผล
         self.select_result_channel = discord.ui.Select(
             placeholder="📊 เลือกห้องสรุปผล",
             options=channel_options,
@@ -283,7 +285,7 @@ class AskQuestionView(discord.ui.View):
 
         embed = discord.Embed(
             title="📢 คำถามสำหรับทุกคน",
-            description=f"{choice_set_name}\n{self.question_text}", # Add choice_set_name to description for easy retrieval
+            description=f"{choice_set_name}\n{self.question_text}",
             color=discord.Color.pink()
         )
 
