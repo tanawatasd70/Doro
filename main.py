@@ -252,6 +252,22 @@ class AskQuestionView(discord.ui.View):
         self.add_item(OpenQuestionModalButton(self))
         self.add_item(SubmitQuestionButton(self))
 
+    async def on_error(self, interaction: discord.Interaction, error: Exception, item: discord.ui.Item) -> None:
+        """Handles any errors that occur during the interaction."""
+        if interaction.is_expired():
+            # Interaction has already timed out, no need to do anything.
+            return
+        
+        # You can log the error for debugging purposes.
+        print(f"An error occurred during interaction with item {item.custom_id}: {error}")
+        
+        # This prevents the "Interaction Failed" message from appearing on the client.
+        try:
+            await interaction.response.send_message("เกิดข้อผิดพลาดขึ้น! โปรดลองอีกครั้งในภายหลัง", ephemeral=True, delete_after=5)
+        except discord.errors.InteractionResponded:
+            # If the interaction was already responded to, we can use followup.
+            await interaction.followup.send("เกิดข้อผิดพลาดขึ้น! โปรดลองอีกครั้งในภายหลัง", ephemeral=True, delete_after=5)
+
     async def submit_question(self, interaction: discord.Interaction):
         """Handles sending the poll message to the selected channel."""
         if not self.question_text:
@@ -350,7 +366,7 @@ async def on_message(message):
         return
 
     if lower_msg.startswith("doroส่งข้อความ") or lower_msg.startswith("doro ส่งข้อความ"):
-        if not message.author.guild_permissions.administrator: # Check for administrator permissions
+        if not message.author.guild_permissions.administrator:
             await message.channel.send("❌ คุณไม่มีสิทธิ์ใช้คำสั่งนี้")
             return
 
