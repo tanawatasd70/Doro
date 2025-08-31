@@ -172,9 +172,10 @@ class SubmitQuestionButton(discord.ui.Button):
 
 class VoteSelect(discord.ui.Select):
     """Dropdown for users to vote in the poll."""
-    def __init__(self, choices):
+    def __init__(self, choices, result_channel_id):
         opts = [discord.SelectOption(label=opt) for opt in choices]
         super().__init__(placeholder="โปรดเลือกคำตอบของคุณ", options=opts, min_values=1, max_values=1)
+        self.result_channel_id = result_channel_id
 
     async def callback(self, interaction2: discord.Interaction):
         user = interaction2.user
@@ -182,14 +183,12 @@ class VoteSelect(discord.ui.Select):
         user_votes = vote_records.setdefault(msg_id, {})
         user_votes[user.id] = self.values[0]
 
-        # Get choices from the message embed to avoid global dependency
         embed_desc_parts = interaction2.message.embeds[0].description.split('\n')
         choice_set_name = embed_desc_parts[0]
         choices = QUESTION_CHOICES.get(choice_set_name)
         if not choices:
-            choices = [] # Fallback to empty list if not found
+            choices = []
 
-        # Summarize votes
         guild = interaction2.guild
         summary = {ans: [] for ans in choices}
         for uid, ans in user_votes.items():
@@ -204,10 +203,7 @@ class VoteSelect(discord.ui.Select):
             if voters:
                 summary_text += ", ".join(voters) + "\n"
 
-        # The following line assumes the result channel is the same as the question channel.
-        # This can be improved by storing the result channel ID in the embed or the vote_records dictionary.
-        result_channel_id = interaction2.message.channel.id
-        result_channel = guild.get_channel(result_channel_id)
+        result_channel = guild.get_channel(self.result_channel_id)
         if result_channel:
             await result_channel.send(
                 embed=discord.Embed(
@@ -226,7 +222,6 @@ class AskQuestionView(discord.ui.View):
         self.question_text = None
         self.choice_set_name = None
 
-        # Select menu for answer choices
         self.select_choices = discord.ui.Select(
             placeholder="เลือกชุดคำตอบ",
             min_values=1,
@@ -238,7 +233,6 @@ class AskQuestionView(discord.ui.View):
         )
         self.add_item(self.select_choices)
 
-        # สร้าง Select Menu สำหรับเลือกช่องส่งคำถาม
         channels = [c for c in guild.channels if isinstance(c, discord.TextChannel)]
         channel_options = [discord.SelectOption(label=ch.name, value=str(ch.id)) for ch in channels]
         self.select_question_channel = discord.ui.Select(
@@ -248,7 +242,6 @@ class AskQuestionView(discord.ui.View):
         )
         self.add_item(self.select_question_channel)
 
-        # สร้าง Select Menu สำหรับเลือกช่องสรุปผล
         self.select_result_channel = discord.ui.Select(
             placeholder="📊 เลือกห้องสรุปผล",
             options=channel_options,
@@ -256,7 +249,6 @@ class AskQuestionView(discord.ui.View):
         )
         self.add_item(self.select_result_channel)
 
-        # Buttons
         self.add_item(OpenQuestionModalButton(self))
         self.add_item(SubmitQuestionButton(self))
 
@@ -290,7 +282,7 @@ class AskQuestionView(discord.ui.View):
         )
 
         vote_view = discord.ui.View()
-        vote_view.add_item(VoteSelect(choices))
+        vote_view.add_item(VoteSelect(choices, result_channel_id))
         sent_msg = await question_channel.send(embed=embed, view=vote_view)
         vote_records[sent_msg.id] = {}
 
@@ -358,6 +350,10 @@ async def on_message(message):
         return
 
     if lower_msg.startswith("doroส่งข้อความ") or lower_msg.startswith("doro ส่งข้อความ"):
+        if not message.author.guild_permissions.administrator: # Check for administrator permissions
+            await message.channel.send("❌ คุณไม่มีสิทธิ์ใช้คำสั่งนี้")
+            return
+
         if lower_msg.startswith("doroส่งข้อความ"):
             content = msg[len("doroส่งข้อความ"):].strip()
         else:
