@@ -182,9 +182,16 @@ class VoteSelect(discord.ui.Select):
         user_votes = vote_records.setdefault(msg_id, {})
         user_votes[user.id] = self.values[0]
 
+        # Get choices from the message embed to avoid global dependency
+        embed_desc_parts = interaction2.message.embeds[0].description.split('\n')
+        choice_set_name = embed_desc_parts[0]
+        choices = QUESTION_CHOICES.get(choice_set_name)
+        if not choices:
+            choices = [] # Fallback to empty list if not found
+
         # Summarize votes
         guild = interaction2.guild
-        summary = {ans: [] for ans in QUESTION_CHOICES[interaction2.message.embeds[0].description.split("\n")[0].split(" ")[0].strip()]} # A bit messy, but gets the choice set name
+        summary = {ans: [] for ans in choices}
         for uid, ans in user_votes.items():
             member = guild.get_member(uid)
             if member:
@@ -215,6 +222,7 @@ class AskQuestionView(discord.ui.View):
         super().__init__(timeout=None)
         self.guild = guild
         self.question_text = None
+        self.choice_set_name = None
 
         # Select menu for answer choices
         self.select_choices = discord.ui.Select(
@@ -275,7 +283,7 @@ class AskQuestionView(discord.ui.View):
 
         embed = discord.Embed(
             title="📢 คำถามสำหรับทุกคน",
-            description=self.question_text,
+            description=f"{choice_set_name}\n{self.question_text}", # Add choice_set_name to description for easy retrieval
             color=discord.Color.pink()
         )
 
