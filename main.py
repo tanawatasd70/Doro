@@ -462,7 +462,7 @@ async def on_message(message):
                 "**m!loop**\t: เล่นซ้ำเพลงปัจจุบัน\n"
                 "**m!shuffle**\t: สุ่มเพลงในคิว"
             ),
-            color=0x1E90FF
+            color=discord.Color.red()
         )
         await message.channel.send(embed=embed)
         return
