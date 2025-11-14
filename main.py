@@ -1,4 +1,3 @@
-# main.py
 import os
 import random
 import asyncio
@@ -13,7 +12,6 @@ from youtubesearchpython import VideosSearch
 
 from myserver import server_on
 
-# --- Config / Logging ---
 load_dotenv()
 DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")
 if not DISCORD_TOKEN:
@@ -50,12 +48,11 @@ QUESTION_CHOICES = {
 }
 
 user_contexts = {}
-vote_records = {}  # msg_id -> { user_id: choice }
-music_queues = {}  # guild_id -> [ {title, url, requester} ]
-now_playing = {}   # guild_id -> current track dict
+vote_records = {}  
+music_queues = {}  
+now_playing = {}   
 audio_lock = asyncio.Lock()
 
-# --- Helpers for music (yt_dlp wrapper) ---
 ytdl_format_options = {
     "format": "bestaudio/best",
     "noplaylist": True,
@@ -77,11 +74,8 @@ async def ytdl_extract(query: str):
     loop = asyncio.get_event_loop()
     try:
         info = await loop.run_in_executor(None, lambda: ytdl.extract_info(query, download=False))
-        # if search, results are in entries
         if "entries" in info:
             info = info["entries"][0]
-        # find best audio url
-        # yt_dlp gives 'url' that can be passed to FFmpegPCMAudio
         return {"title": info.get("title"), "url": info.get("url"), "webpage_url": info.get("webpage_url")}
     except Exception as e:
         logger.exception("yt_dlp error")
@@ -109,7 +103,6 @@ async def play_next_in_queue(guild: discord.Guild):
     def after_play(error):
         if error:
             logger.error(f"Error while playing: {error}")
-        # schedule next
         fut = asyncio.run_coroutine_threadsafe(play_next_in_queue(guild), bot.loop)
         try:
             fut.result()
@@ -118,7 +111,6 @@ async def play_next_in_queue(guild: discord.Guild):
 
     voice_client.play(source, after=after_play)
 
-# --- UI Components ---
 def disable_all_items(view: discord.ui.View):
     for item in view.children:
         item.disabled = True
@@ -666,14 +658,12 @@ async def volume_cmd(ctx: commands.Context, vol: int):
     if not voice_client or not voice_client.source:
         await ctx.send("❌ ไม่มีเพลงกำลังเล่น")
         return
-    # discord.FFmpegPCMAudio doesn't support volume natively; we can use PCM volume transformer if needed.
-    # For simplicity, inform user (implementing volume properly requires different audio pipeline e.g., FFmpeg with -af volume or use discord.PCMVolumeTransformer)
     await ctx.send("⚠️ ปรับเสียงแบบละเอียดยังไม่รองรับในระบบนี้ (ต้องใช้ PCMVolumeTransformer).")
 
-# --- Run server and bot ---
 if __name__ == "__main__":
     try:
         server_on()
     except Exception:
         logger.exception("Error starting server_on() (may be fine if not needed)")
     bot.run(DISCORD_TOKEN)
+
