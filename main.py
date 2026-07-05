@@ -72,7 +72,7 @@ def save_roblox_data(data):
 
 
 # ==========================================
-# 🎛️ MAIN UI COMMAND MENU
+# 🎛️ MAIN UI COMMAND MENU (ลบตัวเองเมื่อกดยืนยัน)
 # ==========================================
 class BotCommandControlSelect(discord.ui.Select):
     def __init__(self):
@@ -95,11 +95,11 @@ class BotCommandControlSelect(discord.ui.Select):
         value = self.values[0]
         current_guild = interaction.guild
         
-        # 🔥 ดักลบแผงควบคุมหลัก (UI Mode อันบนสุดในรูป image_1cdb24.png) ทิ้งทันทีที่กดยืนยัน!
+        # 🔥 ลบแผงควบคุมหลักอันบนสุดทิ้งทันที! (แก้ปัญหารูปรกแชท)
         try:
             await interaction.message.delete()
         except Exception:
-            pass  # กันเหนียวเผื่อบอทไม่มีสิทธิ์ลบข้อความเก่าในห้องแชทนั้น ๆ งับ
+            pass
 
         if value == "setup_roles":
             embed = discord.Embed(
@@ -108,12 +108,10 @@ class BotCommandControlSelect(discord.ui.Select):
                 color=0xFFB6C1
             )
             view = RequestRoleView(current_guild)
-            # เปลี่ยนจาก interaction.response.send_message เป็นการส่งเข้าแชทหลักตรงๆ แทน เพราะเราลบ message หลักไปแล้วค๊าา
             await interaction.channel.send(embed=embed, view=view)
             
         elif value == "setup_poll":
             view = AskQuestionView(current_guild)
-            # ส่งเป็น Ephemeral (เห็นคนเดียว) เหมือนเดิม เพื่อความเป็นส่วนตัวของคนสร้างโพล
             await interaction.response.send_message("📋 **ตั้งค่าระบบโพลคำถามน้าา:** โปรดเลือกห้องแชทและกรอกข้อมูลคำถามให้ครบถ้วนก่อนน้อน Doro จะปล่อยโพลนะค๊าา", view=view, ephemeral=True)
             
         elif value == "roblox_servers":
@@ -132,7 +130,7 @@ class BotCommandControlSelect(discord.ui.Select):
                 color=discord.Color.red()
             )
             view = MemberSelectView(current_guild)
-            await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
+            await interaction.channel.send(embed=embed, view=view)
 
         elif value == "show_commands":
             embed = discord.Embed(
@@ -163,176 +161,135 @@ class BotControlMenuView(discord.ui.View):
 class AddRobloxServerModal(discord.ui.Modal, title="🎮 เพิ่ม/แก้ไข ลิงก์เซิร์ฟเวอร์วี"):
     def __init__(self):
         super().__init__()
-        self.game_id = discord.ui.TextInput(
-            label="รหัสเกม (อังกฤษตัวพิมพ์เล็ก ห้ามเว้นวรรค)", 
-            placeholder="เช่น blox_fruits, bedwars",
-            style=discord.TextStyle.short,
-            required=True
-        )
-        self.game_name = discord.ui.TextInput(
-            label="ชื่อเกมที่จะแสดงบนเมนู (ใส่ อีโมจิ ได้)", 
-            placeholder="เช่น 🏴‍☠️ Blox Fruits (เซิร์ฟหลัก)",
-            style=discord.TextStyle.short,
-            required=True
-        )
-        self.game_url = discord.ui.TextInput(
-            label="ลิงก์ Private Server (Roblox URL)", 
-            placeholder="https://www.roblox.com/share?code=...",
-            style=discord.TextStyle.short,
-            required=True
-        )
+        self.game_id = discord.ui.TextInput(label="รหัสเกม (อังกฤษตัวพิมพ์เล็ก ห้ามเว้นวรรค)", placeholder="เช่น blox_fruits", style=discord.TextStyle.short, required=True)
+        self.game_name = discord.ui.TextInput(label="ชื่อเกมที่จะแสดงบนเมนู (ใส่ อีโมจิ ได้)", placeholder="เช่น 🏴‍☠️ Blox Fruits", style=discord.TextStyle.short, required=True)
+        self.game_url = discord.ui.TextInput(label="ลิงก์ Private Server (Roblox URL)", placeholder="https://www.roblox.com/...", style=discord.TextStyle.short, required=True)
         self.add_item(self.game_id)
         self.add_item(self.game_name)
         self.add_item(self.game_url)
 
     async def on_submit(self, interaction: discord.Interaction):
         if not interaction.user.guild_permissions.manage_guild:
-            return await interaction.response.send_message("❌ งื้ออ คุณไม่มีสิทธิ์จัดการเซิร์ฟเวอร์ ไม่สามารถเพิ่มลิงก์ได้ค๊าา", ephemeral=True)
-
+            return await interaction.response.send_message("❌ คุณไม่มีสิทธิ์จัดการเซิร์ฟเวอร์ค๊าา", ephemeral=True)
         g_id = self.game_id.value.strip().lower().replace(" ", "_")
-        g_name = self.game_name.value.strip()
-        g_url = self.game_url.value.strip()
-
-        if not g_url.startswith("http"):
-            return await interaction.response.send_message("❌ รูปแบบลิงก์ไม่ถูกต้องค๊าา ต้องขึ้นต้นด้วย http หรือ https น้าา", ephemeral=True)
-
         current_data = load_roblox_data()
-        current_data[g_id] = {"name": g_name, "url": g_url}
+        current_data[g_id] = {"name": self.game_name.value.strip(), "url": self.game_url.value.strip()}
         save_roblox_data(current_data)
-        await interaction.response.send_message(f"✅ บันทึกเกม **{g_name}** เรียบร้อยค๊าา! (รบกวนเปิดเมนูใหม่อีกรอบเพื่ออัปเดตนะค๊าา)", ephemeral=True)
+        await interaction.response.send_message(f"✅ บันทึกเกมเรียบร้อยค๊าา!", ephemeral=True)
 
 class DeleteRobloxServerModal(discord.ui.Modal, title="🗑️ ลบลิงก์เซิร์ฟเวอร์วี"):
     def __init__(self):
         super().__init__()
-        self.game_id = discord.ui.TextInput(
-            label="พิมพ์รหัสเกมที่ต้องการลบ (ภาษาอังกฤษ)", 
-            placeholder="เช่น blox_fruits",
-            style=discord.TextStyle.short,
-            required=True
-        )
+        self.game_id = discord.ui.TextInput(label="พิมพ์รหัสเกมที่ต้องการลบ", placeholder="เช่น blox_fruits", style=discord.TextStyle.short, required=True)
         self.add_item(self.game_id)
 
     async def on_submit(self, interaction: discord.Interaction):
         if not interaction.user.guild_permissions.manage_guild:
             return await interaction.response.send_message("❌ สิทธิ์ไม่พอค๊าา", ephemeral=True)
-
         g_id = self.game_id.value.strip().lower()
         current_data = load_roblox_data()
-
         if g_id in current_data:
-            name = current_data[g_id]['name']
             del current_data[g_id]
             save_roblox_data(current_data)
-            await interaction.response.send_message(f"🗑️ ลบลิงก์เกม **{name}** เรียบร้อยแล้วค๊าา!", ephemeral=True)
+            await interaction.response.send_message("🗑️ ลบลิงก์เกมเรียบร้อยแล้วค๊าา!", ephemeral=True)
         else:
-            await interaction.response.send_message(f"❌ ไม่พบรหัสเกม `{g_id}` ในระบบค๊าา", ephemeral=True)
+            await interaction.response.send_message("❌ ไม่พบรหัสเกมนี้ค๊าา", ephemeral=True)
 
 class RobloxServerSelect(discord.ui.Select):
     def __init__(self):
         current_data = load_roblox_data()
         options = []
         if not current_data:
-            options.append(discord.SelectOption(label="ไม่มีเกมในคลังแสง", value="none", description="รอก้ามปูมาเพิ่มเกมค๊าา"))
+            options.append(discord.SelectOption(label="ไม่มีเกมในคลังแสง", value="none"))
         else:
             for key, data in current_data.items():
-                short_name = data["name"][:90] if data["name"] else "Unknown Game"
-                options.append(discord.SelectOption(label=short_name, value=key, description=f"รหัสอ้างอิง: {key}"[:100]))
-        super().__init__(placeholder="🎮 เลือกเกมที่ต้องการเข้าเล่นได้เลยค๊าา...", min_values=1, max_values=1, options=options, custom_id="roblox_select_menu")
+                options.append(discord.SelectOption(label=data["name"][:90], value=key))
+        super().__init__(placeholder="🎮 เลือกเกมที่ต้องการเข้าเล่นได้เลยค๊าา...", options=options, custom_id="roblox_select_menu")
 
     async def callback(self, interaction: discord.Interaction):
-        if self.values[0] == "none":
-            return await interaction.response.send_message("❌ ยังไม่มีเกมในระบบเลยงับบ รอแอดมินมาแอดให้น้าา", ephemeral=True)
-
-        game_key = self.values[0]
-        current_data = load_roblox_data()
-        game_data = current_data.get(game_key)
-        
+        if self.values[0] == "none": return
+        game_data = load_roblox_data().get(self.values[0])
         if game_data:
-            embed = discord.Embed(
-                title=f"🚀 ลิงก์เข้า Private Server เกม {game_data['name']}",
-                description=f"กดที่ปุ่ม **'👉 เข้าเซิร์ฟเวอร์วีที่นี่'** ด้านล่างเพื่อเข้าเล่นได้ทันทีค๊าา!\n\n🔗 ลิงก์สำรอง: {game_data['url']}",
-                color=0x00FFCC
-            )
+            embed = discord.Embed(title=f"🚀 ลิงก์เข้าเกม {game_data['name']}", description=f"🔗 ลิงก์: {game_data['url']}", color=0x00FFCC)
             view = discord.ui.View()
-            
-            raw_label = f"👉 เข้า {game_data['name']}"
-            button_label = raw_label[:45] if len(raw_label) > 0 else "👉 เข้าสู่เซิร์ฟเวอร์วี"
-            
-            view.add_item(discord.ui.Button(label=button_label, url=game_data['url'], style=discord.ButtonStyle.link))
+            view.add_item(discord.ui.Button(label="👉 เข้าเซิร์ฟเวอร์วีที่นี่", url=game_data['url'], style=discord.ButtonStyle.link))
             await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
-        else:
-            await interaction.response.send_message("❌ งื้ออ ลิงก์นี้อาจจะโดนลบหรือแก้ไขไปแล้วค๊าา", ephemeral=True)
 
 class RobloxServerView(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=None)
         self.add_item(RobloxServerSelect())
-
-    @discord.ui.button(label="➕ เพิ่ม/แก้ไขลิงก์เกม", style=discord.ButtonStyle.primary, custom_id="roblox_add_btn")
+    @discord.ui.button(label="➕ เพิ่มเกม", style=discord.ButtonStyle.primary, custom_id="roblox_add_btn")
     async def add_server_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        if not interaction.user.guild_permissions.manage_guild:
-            return await interaction.response.send_message("❌ ปุ่มนี้เฉพาะคุณแอดมินเท่านั้นน้าาองึมม", ephemeral=True)
         await interaction.response.send_modal(AddRobloxServerModal())
-
-    @discord.ui.button(label="🗑️ ลบลิงก์เกม", style=discord.ButtonStyle.danger, custom_id="roblox_del_btn")
+    @discord.ui.button(label="🗑️ ลบเกม", style=discord.ButtonStyle.danger, custom_id="roblox_del_btn")
     async def delete_server_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        if not interaction.user.guild_permissions.manage_guild:
-            return await interaction.response.send_message("❌ ปุ่มนี้เฉพาะแอดมินค๊าา", ephemeral=True)
         await interaction.response.send_modal(DeleteRobloxServerModal())
 
 
 # ==========================================
-# 🛡️ ROLE MANAGEMENT SYSTEM
+# 🛡️ ROLE SYSTEM (ลบแผงรับยศทันทีหลังเลือกเสร็จ)
 # ==========================================
 class RoleSelect(discord.ui.Select):
     def __init__(self, guild):
         roles = [r for r in guild.roles if r.name != "@everyone" and not r.managed]
         options = [discord.SelectOption(label=r.name[:90], value=str(r.id)) for r in roles[:25]]
-        super().__init__(placeholder="🎨 เลือกรับยศสุดเลิศของคุณที่นี่เลยน้าา...", min_values=1, max_values=1, options=options, custom_id="role_select_dropdown")
+        super().__init__(placeholder="🎨 เลือกรับยศสุดเลิศของคุณที่นี่เลยน้าา...", options=options, custom_id="role_select_dropdown")
 
     async def callback(self, interaction: discord.Interaction):
         role = interaction.guild.get_role(int(self.values[0]))
-        if role is None:
-            return await interaction.response.send_message("❌ งื้ออ ไม่พบยศนี้ในเซิร์ฟเวอร์เลยค่ะ", ephemeral=True)
+        if role is None: return
+
+        # 🔥 ลบแผงรับยศทิ้งทันที
+        try:
+            await interaction.message.delete()
+        except Exception:
+            pass
+
         try:
             await interaction.user.add_roles(role)
-            await interaction.response.send_message(f"✅ เย้! ยินดีด้วยน้าา คุณได้รับยศ **{role.name}** เรียบร้อยแล้วค่ะ! 🎉", ephemeral=True)
+            await interaction.channel.send(f"✅ ยินดีด้วยน้าา คุณ **{interaction.user.display_name}** ได้รับยศ **{role.name}** เรียบร้อยแล้วค่ะ! 🎉", delete_after=5)
         except discord.Forbidden:
-            await interaction.response.send_message("❌ น้อน Doro ไม่มีสิทธิ์ให้ยศนี้ง่าา (รบกวนแอดมินช่วยตรวจลำดับยศของหนูหน่อยน้าา)", ephemeral=True)
+            await interaction.channel.send("❌ น้อน Doro ไม่มีสิทธิ์ให้ยศนี้ง่าา", delete_after=5)
 
 class RemoveRolesButton(discord.ui.Button):
     def __init__(self):
         super().__init__(label="ลบยศทั่วไปทั้งหมดออกเยย", style=discord.ButtonStyle.danger, emoji="🗑️", custom_id="role_remove_btn")
 
     async def callback(self, interaction: discord.Interaction):
+        try:
+            await interaction.message.delete()
+        except Exception:
+            pass
+
         roles_to_remove = [r for r in interaction.user.roles if r.name != "@everyone" and not r.managed]
         try:
             if roles_to_remove:
                 await interaction.user.remove_roles(*roles_to_remove)
-            await interaction.response.send_message("🧹 ฟู่ๆๆ~ ลบยศทั่วไปออกจากตัวให้เรียบร้อยแล้วค๊าา ตัวเบาหวิวเยย!", ephemeral=True)
+            await interaction.channel.send(f"🧹 ฟู่ๆๆ~ ลบยศทั้งหมดออกจากตัวคุณ **{interaction.user.display_name}** เรียบร้อยแล้วค๊าา!", delete_after=5)
         except discord.Forbidden:
-            await interaction.response.send_message("❌ งื้ออ หนูลบยศให้ไม่ได้ง่าา พลังของหนูไม่พอ", ephemeral=True)
+            await interaction.channel.send("❌ หนูลบยศให้ไม่ได้ง่าา พลังของหนูไม่พอ", delete_after=5)
 
 class TextInputModal(discord.ui.Modal, title="📝 ส่งเหตุผลอ้อน ๆ เพื่อขอยศพิเศษ"):
-    def __init__(self):
+    def __init__(self, parent_msg):
         super().__init__()
-        self.reason = discord.ui.TextInput(
-            label="เหตุผล/ชื่อยศพิเศษที่อยากได้ค๊าา", 
-            style=discord.TextStyle.paragraph, 
-            placeholder="หนูขอเข้าห้องลับกลุ่มนักพัฒนาหน่อยน้าา...",
-            required=True
-        )
+        self.parent_msg = parent_msg
+        self.reason = discord.ui.TextInput(label="เหตุผล/ชื่อยศพิเศษที่อยากได้ค๊าา", style=discord.TextStyle.paragraph, required=True)
         self.add_item(self.reason)
 
     async def on_submit(self, interaction: discord.Interaction):
-        await interaction.response.send_message(f"📨 ส่งคำขอยศให้แล้วนะค๊าา! ข้อความของคุณ: {self.reason.value}", ephemeral=True)
+        try:
+            await self.parent_msg.delete()
+        except Exception:
+            pass
+        await interaction.response.send_message(f"📨 ส่งคำขอยศพิเศษให้แอดมินพิจารณาแล้วนะค๊าา!", ephemeral=True)
 
 class TextInputButton(discord.ui.Button):
     def __init__(self):
-        super().__init__(label="📝 ส่งคำขอยศพิเศษ (เขียนเหตุผลอ้อนแอดมิน)", style=discord.ButtonStyle.primary, custom_id="role_request_special_btn")
+        super().__init__(label="📝 ส่งคำขอยศพิเศษ", style=discord.ButtonStyle.primary, custom_id="role_request_special_btn")
 
     async def callback(self, interaction: discord.Interaction):
-        await interaction.response.send_modal(TextInputModal())
+        await interaction.response.send_modal(TextInputModal(interaction.message))
 
 class RequestRoleView(discord.ui.View):
     def __init__(self, guild):
@@ -349,88 +306,52 @@ class AskQuestionTextModal(discord.ui.Modal):
     def __init__(self, parent_view):
         super().__init__(title="✍️ รายละเอียดคำถามโพลแสนสนุก")
         self.parent_view = parent_view
-
-        self.question = discord.ui.TextInput(
-            label="หัวข้อคำถามโพลนี้คืออะไรเอ่ย?", 
-            style=discord.TextStyle.short, 
-            placeholder="เย็นนี้ไปกินชาบูกันไหมค๊าา?",
-            required=True
-        )
-        self.choices_input = discord.ui.TextInput(
-            label="ตัวเลือกคำตอบ (แยกด้วยเครื่องหมาย , น้าา)", 
-            style=discord.TextStyle.paragraph, 
-            placeholder="ไปเซ่, ไม่ว่างง่ะ, ชวนคนอื่นเถอะ",
-            required=True
-        )
+        self.question = discord.ui.TextInput(label="หัวข้อคำถามโพลนี้คืออะไรเอ่ย?", style=discord.TextStyle.short, required=True)
+        self.choices_input = discord.ui.TextInput(label="ตัวเลือกคำตอบ (แยกด้วยเครื่องหมาย , น้าา)", style=discord.TextStyle.paragraph, required=True)
         self.add_item(self.question)
         self.add_item(self.choices_input)
 
     async def on_submit(self, interaction: discord.Interaction):
         self.parent_view.question_text = self.question.value.strip()
-        parsed_choices = [c.strip() for c in self.choices_input.value.split(",") if c.strip()]
-        
-        if len(parsed_choices) < 2:
-            return await interaction.response.send_message("❗ โธ่.. ใส่ตัวเลือกให้น้อน Doro อย่างน้อย 2 ช้อยส์สิคะงับ", ephemeral=True)
-        if len(parsed_choices) > 25:
-            return await interaction.response.send_message("❗ ช้อยส์เยอะเกินไปแล้วว รองรับสูงสุด 25 ตัวเลือกน้าา", ephemeral=True)
-            
-        self.parent_view.poll_choices = parsed_choices
-        await interaction.response.send_message(f"✏️ น้อน Doro จำคำถามและตัวเลือก ({len(parsed_choices)} ช้อยส์) ลงสมุดโน้ตแล้วค่ะ!", ephemeral=True)
+        self.parent_view.poll_choices = [c.strip() for c in self.choices_input.value.split(",") if c.strip()]
+        await interaction.response.send_message(f"✏️ บันทึกคำถามและตัวเลือกเรียบร้อยแล้วค่ะ!", ephemeral=True)
 
 class OpenQuestionModalButton(discord.ui.Button):
     def __init__(self, parent_view):
         super().__init__(label="✏️ กรอกคำถามและตัวเลือกโพล", style=discord.ButtonStyle.secondary, custom_id="poll_open_modal_btn")
         self.parent_view = parent_view
-
     async def callback(self, interaction: discord.Interaction):
-        await self.parent_view.guild.fetch_member(interaction.user.id)
         await interaction.response.send_modal(AskQuestionTextModal(self.parent_view))
 
 class SubmitQuestionButton(discord.ui.Button):
     def __init__(self, parent_view):
         super().__init__(label="🚀 ยืนยันปล่อยโพลเลยค๊าา", style=discord.ButtonStyle.success, custom_id="poll_submit_btn")
         self.parent_view = parent_view
-
     async def callback(self, interaction: discord.Interaction):
         await self.parent_view.submit_question(interaction)
 
 class VoteSelect(discord.ui.Select):
     def __init__(self, choices, result_channel_id, all_choices_list):
-        opts = [discord.SelectOption(label=opt[:90] if opt else "ตัวเลือก") for opt in choices]
-        super().__init__(placeholder="🗳️ กดตรงนี้เพื่อโหวตเลือกคำตอบที่คุณชอบเลยน้าา...", options=opts, min_values=1, max_values=1, custom_id="poll_vote_select")
+        opts = [discord.SelectOption(label=opt[:90]) for opt in choices]
+        super().__init__(placeholder="🗳️ กดตรงนี้เพื่อโหวตเลือกคำตอบที่คุณชอบเลยน้าา...", options=opts, custom_id="poll_vote_select")
         self.result_channel_id = result_channel_id
         self.all_choices_list = all_choices_list  
 
     async def callback(self, interaction2: discord.Interaction):
         user = interaction2.user
         poll_msg_id = interaction2.message.id
-        
         user_votes = vote_records.setdefault(poll_msg_id, {})
         user_votes[user.id] = self.values[0]
-        guild = interaction2.guild
         
-        summary = {ans: [] for ans in self.all_choices_list}
-        for uid, ans in user_votes.items():
-            member = guild.get_member(uid) if guild else None
-            if member: 
-                summary.setdefault(ans, []).append(member.display_name)
-            else: 
-                summary.setdefault(ans, []).append(f"<@{uid}>")
-
         summary_text = ""
-        for ans in summary:
-            voters = summary[ans]
+        for ans in self.all_choices_list:
+            voters = [interaction2.guild.get_member(uid).display_name for uid, a in user_votes.items() if a == ans and interaction2.guild.get_member(uid)]
             summary_text += f"**{ans}**: {len(voters)} คะแนนเสียง\n"
             if voters: summary_text += "     ↳ " + ", ".join(voters) + "\n"
 
-        result_channel = guild.get_channel(self.result_channel_id) if guild else None
+        result_channel = interaction2.guild.get_channel(self.result_channel_id)
         if result_channel:
-            embed_res = discord.Embed(
-                title="📊 ผลโหวตเรียลไทม์ (น้อน Doro อัปเดตให้เรื่อย ๆ เยย)", 
-                description=f"ผลสรุปของคำถาม: **{interaction2.message.embeds[0].fields[0].value if interaction2.message.embeds else 'โพล'}**\n\n{summary_text}", 
-                color=0x87CEEB
-            )
-            
+            embed_res = discord.Embed(title="📊 ผลโหวตเรียลไทม์", description=summary_text, color=0x87CEEB)
             res_msg_id = poll_result_messages.get(poll_msg_id)
             if res_msg_id:
                 try:
@@ -442,8 +363,7 @@ class VoteSelect(discord.ui.Select):
             else:
                 new_res_msg = await result_channel.send(embed=embed_res)
                 poll_result_messages[poll_msg_id] = new_res_msg.id
-
-        await interaction2.response.send_message(f"✅ น้อน Doro กาหัวใจและบันทึกคะแนนให้เรียบร้อยแล้วค่ะ!", ephemeral=True, delete_after=2)
+        await interaction2.response.send_message("✅ บันทึกคะแนนเสียงแล้วค่ะ!", ephemeral=True, delete_after=2)
 
 class AskQuestionView(discord.ui.View):
     def __init__(self, guild):
@@ -451,26 +371,17 @@ class AskQuestionView(discord.ui.View):
         self.guild = guild
         self.question_text = None
         self.poll_choices = []
-        
         self.target_channel_id = None
         self.result_channel_id = None
 
         channels = [c for c in guild.channels if isinstance(c, discord.TextChannel)]
         channel_options = [discord.SelectOption(label=f"#{ch.name}"[:40], value=str(ch.id)) for ch in channels[:25]]
         
-        self.select_question_channel = discord.ui.Select(
-            placeholder="📢 1. เลือกห้องที่จะให้น้อน Doro ไปปล่อยโพลค่ะ", 
-            options=channel_options,
-            custom_id="poll_select_target_channel"
-        )
+        self.select_question_channel = discord.ui.Select(placeholder="📢 1. เลือกห้องที่จะปล่อยโพล", options=channel_options, custom_id="poll_select_target_channel")
         self.select_question_channel.callback = self.on_select_target_channel
         self.add_item(self.select_question_channel)
 
-        self.select_result_channel = discord.ui.Select(
-            placeholder="📊 2. เลือกห้องที่จะให้สรุปคะแนนโหวตโชว์ค่ะ", 
-            options=channel_options,
-            custom_id="poll_select_result_channel"
-        )
+        self.select_result_channel = discord.ui.Select(placeholder="📊 2. เลือกห้องที่จะให้สรุปคะแนน", options=channel_options, custom_id="poll_select_result_channel")
         self.select_result_channel.callback = self.on_select_result_channel
         self.add_item(self.select_result_channel)
 
@@ -480,41 +391,25 @@ class AskQuestionView(discord.ui.View):
     async def on_select_target_channel(self, interaction: discord.Interaction):
         self.target_channel_id = int(self.select_question_channel.values[0])
         await interaction.response.defer()  
-
     async def on_select_result_channel(self, interaction: discord.Interaction):
         self.result_channel_id = int(self.select_result_channel.values[0])
         await interaction.response.defer()
 
     async def submit_question(self, interaction: discord.Interaction):
-        if not self.question_text or not self.poll_choices:
-            return await interaction.response.send_message("❗ งื้ออ อย่าเพิ่งใจร้อนสิคะ! กรอกคำถามและช้อยส์ผ่านปุ่มก่อนน้าา", ephemeral=True)
-            
-        if not self.target_channel_id or not self.result_channel_id:
-            return await interaction.response.send_message("❗ ลืมเลือกห้องปล่อยคำถามหรือห้องสรุปผลด้วยน้าา", ephemeral=True)
-
+        if not self.question_text or not self.poll_choices or not self.target_channel_id or not self.result_channel_id:
+            return await interaction.response.send_message("❗ กรอกข้อมูลให้ครบถ้วนก่อนน้าา", ephemeral=True)
         q_channel = self.guild.get_channel(self.target_channel_id)
-        if not q_channel:
-            return await interaction.response.send_message("❌ ไม่พบห้องแชทที่จะปล่อยโพลค๊าา บอทอาจไม่มีสิทธิ์เข้าถึง", ephemeral=True)
-
-        try:
-            embed = discord.Embed(title="📢 น้อน Doro ขอเชิญชวนทุกคนมาร่วมลงประชามติกันค๊าา~", color=discord.Color.pink())
-            embed.add_field(name="❓ หัวข้อคำถามโพล", value=self.question_text, inline=False)
-            
-            choices_desc = "\n".join([f"🔹 {c}" for c in self.poll_choices])
-            embed.add_field(name="📦 รายการตัวเลือก", value=choices_desc, inline=False)
-            
+        if q_channel:
+            embed = discord.Embed(title=f"❓ โพล: {self.question_text}", color=discord.Color.pink())
             vote_view = discord.ui.View(timeout=None)
             vote_view.add_item(VoteSelect(self.poll_choices, self.result_channel_id, self.poll_choices))
-            
             sent_msg = await q_channel.send(embed=embed, view=vote_view)
             vote_records[sent_msg.id] = {}
-            await interaction.response.send_message(f"✅ บินไปปล่อยโพลเรียบร้อยแล้วที่ห้อง {q_channel.mention} น้าา ฟิ้วว~", ephemeral=True)
-        except Exception as e:
-            await interaction.response.send_message(f"❌ เกิดข้อผิดพลาดระบบ HTTP: {e}", ephemeral=True)
+            await interaction.response.send_message("✅ ปล่อยโพลเรียบร้อย!", ephemeral=True)
 
 
 # ==========================================
-# 🚫 VOTE KICK SYSTEM
+# 🚫 VOTE KICK SYSTEM (ลบเมนูเมื่อทำรายการเสร็จ)
 # ==========================================
 class MemberSelect(discord.ui.UserSelect):
     def __init__(self, guild):
@@ -523,25 +418,28 @@ class MemberSelect(discord.ui.UserSelect):
 
     async def callback(self, interaction: discord.Interaction):
         target_member = self.values[0]
-        if target_member.id == interaction.user.id:
-            return await interaction.response.send_message("เอ๋.. จะโหวตเตะตัวเองทำไมค๊าาเนี่ยย น้อน Doro งงนะ! 😂❤️", ephemeral=True)
-        if target_member.bot:
-            return await interaction.response.send_message("บอทอย่างหนูและผองเพื่อนมีเกราะมนตราอมตะ โหวตเตะไม่ได้หหรอกน้าา 🤖🛡️", ephemeral=True)
+        if target_member.id == interaction.user.id or target_member.bot:
+            return await interaction.response.send_message("❌ เลือกโหวตเตะคนนี้ไม่ได้ค๊าา!", ephemeral=True)
 
         member_obj = interaction.guild.get_member(target_member.id)
-        if not member_obj:
-            return await interaction.response.send_message("❌ งื้ออ ไม่เจอคนคนนี้ในเซิร์ฟเวอร์เลยค่ะ", ephemeral=True)
+        if not member_obj: return
+
+        # 🔥 ลบแผงเลือกรายชื่อทันที
+        try:
+            await interaction.message.delete()
+        except Exception:
+            pass
 
         online_members = [m for m in self.guild.members if m.status != discord.Status.offline and not m.bot]
         required_votes = max(2, len(online_members) // 2 + 1)
         view = VoteKickTypeView(member_obj, required_votes)
         
         embed = discord.Embed(
-            title="🛠️ ตั้งค่าศาลเตี้ยประชามติโหวตลงทัณฑ์",
-            description=f"เป้าหมาย: {member_obj.mention}\nโปรดกดเลือกบทลงโทษที่อยากให้น้อน Doro ลงมือทำด้านล่างนี้ได้เลยค่ะ!",
+            title="🛠️ ตั้งค่าบทลงทัณฑ์ศาลเตี้ย",
+            description=f"เป้าหมาย: {member_obj.mention}\nโปรดเลือกประเภทบทลงโทษด้านล่างนี้เลยค๊าา!",
             color=0xF1C40F
         )
-        await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
+        await interaction.channel.send(embed=embed, view=view)
 
 class MemberSelectView(discord.ui.View):
     def __init__(self, guild):
@@ -551,16 +449,18 @@ class MemberSelectView(discord.ui.View):
 class KickTypeButton(discord.ui.Button):
     def __init__(self, target: discord.Member, kick_type: str, required_votes: int):
         label_str = "🔊 เตะออกจากห้องเสียง" if kick_type == "voice" else "💥 ดีดออกจากเซิร์ฟเวอร์"
-        safe_label = label_str[:45]
-        
         style = discord.ButtonStyle.primary if kick_type == "voice" else discord.ButtonStyle.danger
-        custom_id_str = f"kick_btn_{kick_type}_{target.id}"
-        super().__init__(label=safe_label, style=style, custom_id=custom_id_str[:100])
+        super().__init__(label=label_str[:45], style=style, custom_id=f"kick_btn_{kick_type}_{target.id}")
         self.target = target
         self.kick_type = kick_type
         self.required_votes = required_votes
 
     async def callback(self, interaction: discord.Interaction):
+        try:
+            await interaction.message.delete()
+        except Exception:
+            pass
+
         view = VoteProgressView(self.target, self.kick_type, self.required_votes)
         embed = discord.Embed(
             title=f"🚨 เปิดวาระลงคะแนนโหวตขับไล่ขั้นเด็ดขาด!",
@@ -568,11 +468,6 @@ class KickTypeButton(discord.ui.Button):
             color=discord.Color.red()
         )
         embed.add_field(name="ตารางคะแนนในขณะนี้งับ", value=f"🟢 เห็นด้วย (Vote): 0/{self.required_votes}")
-        
-        if self.view:
-            for item in self.view.children: item.disabled = True
-            await interaction.response.edit_message(view=self.view)
-            
         await interaction.channel.send(embed=embed, view=view)
 
 class VoteKickTypeView(discord.ui.View):
@@ -591,10 +486,8 @@ class VoteProgressView(discord.ui.View):
 
     @discord.ui.button(label="🟢 เห็นด้วย ลุยเยย! (Vote)", style=discord.ButtonStyle.success, emoji="👍", custom_id="kick_vote_yes_btn")
     async def vote_callback(self, interaction: discord.Interaction, button: discord.ui.Button):
-        if interaction.user.id in self.voters:
-            return await interaction.response.send_message("คุณใช้สิทธิ์ไปแล้วน้าา ห้ามกดซ้ำสิระคะ!", ephemeral=True)
-        if interaction.user.id == self.target.id:
-            return await interaction.response.send_message("จะกดเห็นด้วยเพื่อเตะตัวเองไม่ได้น้าาา! 🤣", ephemeral=True)
+        if interaction.user.id in self.voters or interaction.user.id == self.target.id:
+            return await interaction.response.send_message("❌ ไม่สามารถใช้สิทธิ์โหวตได้ค๊าา!", ephemeral=True)
 
         self.voters.add(interaction.user.id)
         current_votes = len(self.voters)
@@ -602,27 +495,30 @@ class VoteProgressView(discord.ui.View):
         embed.set_field_at(0, name="ตารางคะแนนในขณะนี้งับ", value=f"🟢 เห็นด้วย (Vote): {current_votes}/{self.required_votes}")
 
         if current_votes >= self.required_votes:
-            for item in self.children: item.disabled = True
-            await interaction.response.edit_message(embed=embed, view=self)
+            try:
+                await interaction.message.delete()
+            except Exception:
+                pass
+            
             try:
                 if self.kick_type == "voice":
                     if self.target.voice and self.target.voice.channel:
-                        await self.target.move_to(None, reason="มติโหวตเห็นด้วยให้เตะแยกย้ายจากเสียง")
-                        await interaction.channel.send(f"🔨 มติเป็นเอกฉันท์ค๊าา น้อน Doro ตัดสาย {self.target.mention} ออกจากห้องเสียงเรียบร้อย!")
+                        await self.target.move_to(None, reason="มติโหวตเตะออกจากห้องเสียง")
+                        await interaction.channel.send(f"🔨 มติเป็นเอกฉันท์ค๊าา ดีดสาย {self.target.mention} ออกจากห้องเสียงเรียบร้อย!")
                     else:
-                        await interaction.channel.send(f"⚠️ ผลโหวตชนะแล้วน้าา แต่เป้าหมาย {self.target.mention} แอบวิ่งหนีออกจากห้องเสียงไปก่อนแล้วง่ะ")
+                        await interaction.channel.send(f"⚠️ ผลโหวตชนะแล้วแต่เป้าหมายหนีออกจากห้องเสียงไปก่อนงับ")
                 elif self.kick_type == "server":
                     await self.target.kick(reason="ผลโหวตลงมติเตะออกจากเซิร์ฟเวอร์")
-                    await interaction.channel.send(f"💥 ประชามติเห็นพ้องต้องกัน น้อน Doro ส่ง {self.target.mention} ปลิวหายไปจากเซิร์ฟเวอร์แล้วค๊าา~")
+                    await interaction.channel.send(f"💥 ประชามติเห็นพ้อง น้อน Doro ดีด {self.target.mention} ปลิวออกจากเซิร์ฟเวอร์แล้วค๊าา~")
             except discord.Forbidden:
-                await interaction.channel.send(f"❌ ระบบไม่ทำงาน: ยศของหนูต่ำกว่าเป้าหมาย หรือหนูขาดสิทธิ์การเตะคน")
+                await interaction.channel.send(f"❌ หนูขาดสิทธิ์ในการเตะสมาชิกคนนี้ค่ะ")
             self.stop()
         else:
             await interaction.response.edit_message(embed=embed, view=self)
 
 
 # ==========================================
-# ⚙️ SYSTEM CORE & EVENTS (FUZZY MATCHING INTERACTION)
+# ⚙️ SYSTEM CORE & EVENTS (ส่วนท้ายที่สมบูรณ์)
 # ==========================================
 @bot.event
 async def on_ready():
@@ -632,222 +528,139 @@ async def on_ready():
 async def on_message(message: discord.Message):
     if message.author.bot: return
 
-    user_id = message.author.id
     msg = message.content.strip()
     lower_msg = msg.lower()
-
-    user_contexts.setdefault(user_id, []).append((user_id, message.author.name, msg))
-    if len(user_contexts[user_id]) > 5: user_contexts[user_id].pop(0)
+    parts = msg.split()
 
     try:
-        # --- 1. คำสั่งตอบกลับทั่วไปแบบคุยเล่น (เช็กคีย์เวิร์ดตรง ๆ) ---
         if lower_msg in custom_responses:
             await message.channel.send(custom_responses[lower_msg])
             return
 
-        # --- 2. คำสั่งหลักและแผงควบคุม UI (อัปเกรด: ระบบตรวจคำนิ้วเบียดอัจฉริยะ) ---
-        
-        # 📌 ดักคำสั่งเปิดเมนู (รองรับ: doro เมนู, doro เมณู, doro เเมนู, doro menu, doro munu, doro menuu)
+        # 📌 เปิดแผงควบคุมหลัก (พร้อมลบคำสั่งตัวหนังสือเพื่อความคลีน)
         is_menu_cmd = False
         for keyword in ["เมนู", "เมณู", "เเมนู", "menu", "munu", "menuu"]:
             if f"doro {keyword}" in lower_msg or f"doro{keyword}" in lower_msg:
                 is_menu_cmd = True
                 break
-
         if is_menu_cmd:
-            embed = discord.Embed(
-                title="⚙️ Doro แผงควบคุมระบบอัจฉริยะสุดน่ารัก (UI Mode)",
-                description="ยินดีต้อนรับสู่ดินแดนแห่งความน่ารักค๊าา! เลือกเมนูด้านล่างนี้เพื่อเปิดใช้งานฟังก์ชันได้ตามใจชอบเลยนะค๊าา ✨",
-                color=0x3498DB
-            )
-            view = BotControlMenuView()
-            await message.channel.send(embed=embed, view=view)
+            try: await message.delete() 
+            except Exception: pass
+            embed = discord.Embed(title="⚙️ Doro แผงควบคุมระบบอัจฉริยะสุดน่ารัก (UI Mode)", description="ยินดีต้อนรับสู่ดินแดนแห่งความน่ารักค๊าา! เลือกเมนูด้านล่างนี้เพื่อเปิดใช้งานฟังก์ชันได้ตามใจชอบเลยนะค๊าา ✨", color=0x3498DB)
+            await message.channel.send(embed=embed, view=BotControlMenuView())
             return
 
-        # 📌 ดักคำสั่งโหวตเตะ (รองรับ: doro โหวตเตะ, doro โหวดเตะ, doro โหวตเเตะ, doro votekick, doro vote, doro kick)
+        # 📌 เรียกแผงโหวตเตะโดยตรง
         is_kick_cmd = False
         for keyword in ["โหวตเตะ", "โหวดเตะ", "โหวตเเตะ", "votekick", "vote", "kick"]:
             if f"doro {keyword}" in lower_msg or f"doro{keyword}" in lower_msg:
                 is_kick_cmd = True
                 break
-
         if is_kick_cmd:
-            embed = discord.Embed(
-                title="🚫 เริ่มวาระโหวตเตะสมาชิกคนไม่ดี (UI Mode)",
-                description="โปรดเลือกรายชื่อสมาชิกที่คุณต้องการเริ่มโหวตลงมติเตะจากเมนูด้านล่างนี้ได้เลยค่ะงึมมม",
-                color=discord.Color.red()
-            )
-            view = MemberSelectView(message.guild)
-            await message.channel.send(embed=embed, view=view)
+            try: await message.delete()
+            except Exception: pass
+            embed = discord.Embed(title="🚫 เริ่มวาระโหวตเตะสมาชิกคนไม่ดี (UI Mode)", description="โปรดเลือกรายชื่อสมาชิกที่คุณต้องการเริ่มโหวตลงมติเตะจากเมนูด้านล่างนี้ได้เลยค่ะงึมมม", color=discord.Color.red())
+            await message.channel.send(embed=embed, view=MemberSelectView(message.guild))
             return
 
-        # 📌 ดักคำสั่งเช็กสมาชิก (รองรับ: doro สมาชิกทั้งหมด, doro สมาชิก, doro สะมาชิก, doro member, doro mamber)
+        # 📌 เช็กสถิติสมาชิก
         is_member_cmd = False
         for keyword in ["สมาชิกทั้งหมด", "สมาชิก", "สะมาชิก", "member", "mamber"]:
             if f"doro {keyword}" in lower_msg or f"doro{keyword}" in lower_msg:
                 is_member_cmd = True
                 break
-
         if is_member_cmd:
             guild = message.guild
-            if guild is None: return
-            
-            online = sum(1 for m in guild.members if m.status == discord.Status.online)
-            idle = sum(1 for m in guild.members if m.status == discord.Status.idle)
-            dnd = sum(1 for m in guild.members if m.status == discord.Status.dnd)
-            offline = sum(1 for m in guild.members if m.status == discord.Status.offline)
-            
-            embed = discord.Embed(
-                title="📊 สถิติสมาชิกในเซิร์ฟเวอร์แบบตะมุตะมิ",
-                description=f"🟢 ออนไลน์: {online} คน\n🌙 จอฟ้า/ว่าง: {idle} คน\n⛔ ห้ามรบกวน: {dnd} คน\n⚪ ออฟไลน์: {offline} คน",
-                color=discord.Color.green()
-            )
-            await message.channel.send(embed=embed)
+            if guild:
+                online = sum(1 for m in guild.members if m.status == discord.Status.online)
+                idle = sum(1 for m in guild.members if m.status == discord.Status.idle)
+                dnd = sum(1 for m in guild.members if m.status == discord.Status.dnd)
+                offline = sum(1 for m in guild.members if m.status == discord.Status.offline)
+                embed = discord.Embed(title="📊 สถิติสมาชิกในเซิร์ฟเวอร์แบบตะมุตะมิ", description=f"🟢 ออนไลน์: {online} คน\n🌙 ว่าง: {idle} คน\n⛔ ห้ามรบกวน: {dnd} คน\n⚪ ออฟไลน์: {offline} คน", color=discord.Color.green())
+                await message.channel.send(embed=embed)
             return
 
-        # --- 3. คำสั่งดึงเวลาปัจจุบัน ---
+        # 📌 ดึงเวลาปัจจุบัน
         if lower_msg in ["doro เวลา", "doro time"]:
             tz = pytz.timezone("Asia/Bangkok")
-            now = datetime.now(tz)
-            time_str = now.strftime("%H:%M:%S น. (%d/%m/%Y)")
-            await message.channel.send(f"⏰ เวลาปัจจุบันของบ้านเราคือ **{time_str}** ค่ะน้าา!")
+            await message.channel.send(f"⏰ เวลาปัจจุบันของบ้านเราคือ **{datetime.now(tz).strftime('%H:%M:%S น.')}** ค่ะน้าา!")
             return
 
-        # --- 4. คำสั่งคู่มือเพลงประจำตัวบอท ---
+        # 📌 คู่มือเปิดเพลง
         if lower_msg in ["doro คำสั่งเพลง", "doro music"]:
-            embed = discord.Embed(
-                title="🎵 คู่มือเปิดเพลงแสนสุนทรีย์ของน้อน Doro 🎶",
-                description=(
-                    "คุณสามารถควบคุมเครื่องเสียงของหนูผ่านคำสั่งแชทเหล่านี้ได้เลยค๊าา:\n\n"
-                    "**▶️ !play <ชื่อเพลง/ลิงก์ YouTube>** : ชวนหนูเข้าห้องเสียงแล้วเปิดเพลงให้ฟัง\n"
-                    "**⏭️ !skip** : ข้ามไปเพลงถัดไปในคิว\n"
-                    "**⏹️ !stop** : ปิดเพลงและแยกย้ายออกจากห้องเสียงค๊าา"
-                ),
-                color=0x9B59B6
-            )
+            embed = discord.Embed(title="🎵 คู่มือเปิดเพลงแสนสุนทรีย์ 🎶", description="**▶️ !play <ชื่อเพลง>**\n**⏭️ !skip**\n**⏹️ !stop**", color=0x9B59B6)
             await message.channel.send(embed=embed)
             return
 
-        # --- 5. คำสั่งค้นหาคลิปวิดีโอ YouTube ---
-        is_search_cmd = False
-        start_idx = 0
-        if lower_msg.startswith("doro ค้นหา"):
-            is_search_cmd = True
-            start_idx = 10
-        elif lower_msg.startswith("doro search"):
-            is_search_cmd = True
-            start_idx = 11
-
-        if is_search_cmd:
-            search_query = msg[start_idx:].strip()
-            if not search_query:
-                await message.channel.send("❗ งื้ออ ลืมบอกหนูว่าอยากให้ค้นหาคำว่าอะไรค๊าา! เช่น `doro ค้นหา มิกุ` หรือ `doro search miku`")
-                return
-            await message.channel.send(f"🔍 น้อน Doro กำลังดำน้ำหาคลิป `{search_query}` ใน YouTube ให้แป๊บน้าา...")
-            try:
-                videos_search = VideosSearch(search_query, limit=1)
-                result = videos_search.result()
-                if result and result.get("result"):
-                    video_url = result["result"][0]["link"]
-                    await message.channel.send(f"🎬 เจอแล้วค๊าา ลิงก์นี้เลยงับบ:\n{video_url}")
-                else:
-                    await message.channel.send("😭 งึมม หาคลิปนี้ไม่เจอใน YouTube เลยค่ะ")
-            except Exception as e:
-                await message.channel.send(f"❌ เกิดข้อผิดพลาดในระบบค้นหาคลิป: {e}")
+        # 📌 ค้นหาคลิปวิดีโอ
+        if lower_msg.startswith("doro ค้นหา") or lower_msg.startswith("doro search"):
+            idx = 10 if lower_msg.startswith("doro ค้นหา") else 11
+            query = msg[idx:].strip()
+            if query:
+                res = VideosSearch(query, limit=1).result()
+                if res and res.get("result"): await message.channel.send(f"🎬 เจอแล้วค๊าา ลิงก์นี้เลยงับบ:\n{res['result'][0]['link']}")
+                else: await message.channel.send("😭 งึมม หาคลิปนี้ไม่เจอใน YouTube เลยค่ะ")
             return
 
-        # --- 6. คำสั่งแอดมินส่งข้อความผ่านบอท ---
+        # 📌 แอดมินฝากส่งข้อความผ่านบอท
         is_send_cmd = False
-        parts = msg.split()
         if len(parts) >= 2:
-            combined_prefix = parts[0].lower() + parts[1].lower()
-            if combined_prefix in ["doroส่งข้อความ", "dorosend"] or (len(parts) >= 3 and parts[0].lower() == "doro" and parts[1].lower() in ["ส่งข้อความ", "send"]):
+            combined = parts[0].lower() + parts[1].lower()
+            if combined in ["doroส่งข้อความ", "dorosend"] or (len(parts) >= 3 and parts[0].lower() == "doro" and parts[1].lower() in ["ส่งข้อความ", "send"]):
                 is_send_cmd = True
-
         if is_send_cmd:
-            if not message.author.guild_permissions.administrator:
-                await message.channel.send("❌ คำสั่งส่งข้อความลับนี้ เฉพาะคุณแอดมินผู้น่าเกรงขามเท่านั้นน้าา!", delete_after=5)
-                return
-            
+            if not message.author.guild_permissions.administrator: return
             raw_parts = msg.split(maxsplit=3)
-            # กรณีพิมพ์ติดกัน doroส่งข้อความ <id> <text> แยกร่างคำสั่ง
             if raw_parts[0].lower().startswith("doroส่งข้อความ") or raw_parts[0].lower().startswith("dorosend"):
                 raw_parts = msg.split(maxsplit=2)
-                if len(raw_parts) < 3: return
-                target_part = raw_parts[1]
-                text_part = raw_parts[2]
+                target_part, text_part = raw_parts[1], raw_parts[2]
             else:
-                if len(raw_parts) < 4: return
-                target_part = raw_parts[2]
-                text_part = raw_parts[3]
-            
+                target_part, text_part = raw_parts[2], raw_parts[3]
             try:
-                target_chan_id = int(target_part.replace("<#", "").replace(">", ""))
-                chan = message.guild.get_channel(target_chan_id)
+                chan = message.guild.get_channel(int(target_part.replace("<#", "").replace(">", "")))
                 if chan:
                     await chan.send(text_part)
-                    await message.channel.send(f"✅ ฝากส่งกระดาษโน้ตไปที่ห้อง {chan.mention} เรียบร้อยแล้วค่ะ!", delete_after=3)
-                else:
-                    await message.channel.send("❌ หนูนึกห้องแชท id นี้ไม่ออกง่ะ ลองเช็กเลขดี ๆ อีกรอบนะคะ")
-            except ValueError:
-                await message.channel.send("❌ รูปแบบไอดีห้องแชทไม่ถูกต้องงับบ")
+                    try: await message.delete() 
+                    except Exception: pass
+            except Exception: pass
             return
 
-        # --- 7. คำสั่งลบข้อความด่วน ---
+        # 📌 สั่งลบข้อความด่วน
         is_clear_cmd = False
         for keyword in ["ลบข้อความ", "clear", "ลบ"]:
             if f"doro {keyword}" in lower_msg or f"doro{keyword}" in lower_msg:
                 is_clear_cmd = True
                 break
-
-        if is_clear_cmd:
-            if not message.author.guild_permissions.manage_messages:
-                await message.channel.send("❌ โธ่.. คุณไม่มีสิทธิ์จัดการข้อความน้าา สั่งลบไม่ได้งับบ", delete_after=5)
-                return
-            
-            if len(parts) < 3:
-                await message.channel.send("❗ ลืมระบุจำนวนข้อความที่จะให้ลบค๊าา! เช่น `doro ลบข้อความ 10` หรือ `doro clear 10`")
-                return
-                
+        if is_clear_cmd and len(parts) >= 3:
+            if not message.author.guild_permissions.manage_messages: return
             try:
-                amount = int(parts[2]) + 1  
-                deleted = await message.channel.purge(limit=amount)
-                await message.channel.send(f"🧹 ร่ายเวทมนตร์เสกข้อความหายวับไป {len(deleted)-1} ข้อความแล้วค่ะ!", delete_after=3)
-            except Exception as e:
-                await message.channel.send(f"❌ พลังลบข้อความล้มเหลว: {e}")
+                deleted = await message.channel.purge(limit=int(parts[2]) + 1)
+                await message.channel.send(f"🧹 เสกข้อความหายวับไป {len(deleted)-1} ข้อความแล้วค่ะ!", delete_after=3)
+            except Exception: pass
             return
 
-        # --- 8. คำสั่งรีเซ็ตชุบชีวิตห้องแชทใหม่ (ดักคำผิด รีเซ็ต/รีเซต + หายวับใน 3 วิ) ---
+        # 📌 สั่งรีเซ็ตห้องแชทใหม่ใน 3 วินาที
         is_reset_cmd = False
         for keyword in ["รีเซ็ตห้อง", "รีเซตห้อง", "รีเซ็ต", "รีเซต", "reset"]:
             if f"doro {keyword}" in lower_msg or f"doro{keyword}" in lower_msg:
                 is_reset_cmd = True
                 break
-
         if is_reset_cmd:
-            if not message.author.guild_permissions.manage_channels:
-                await message.channel.send("❌ เฉพาะแอดมินหรือผู้จัดการห้องแชทเท่านั้นที่จะสั่งชุบชีวิตห้องใหม่ได้ค่ะ!", delete_after=5)
-                return
-                
-            current_channel = message.channel
-            position = current_channel.position
-            await message.channel.send("🌀 น้อน Doro กำลังเปิดประตูมิติม้วนเวลาชุบชีวิตห้องแชทนี้ใหม่ใน 3 วินาที...")
+            if not message.author.guild_permissions.manage_channels: return
+            chan = message.channel
+            pos = chan.position
+            await chan.send("🌀 น้อน Doro กำลังเปิดประตูมิติม้วนเวลาชุบชีวิตห้องแชทนี้ใหม่ใน 3 วินาที...")
             await asyncio.sleep(3)
-            
             try:
-                new_channel = await current_channel.clone(reason="Doro ร่ายเวทมนตร์รีเซ็ตห้องแชทให้สะอาดเอี่ยม")
-                await current_channel.delete(reason="ห้องเก่าโดนรีเซ็ตเคลียร์ขยะ")
-                await new_channel.edit(position=position)
-                
-                # ✨ ข้อความเปิดตัวขึ้นโชว์ 3 วินาทีแล้วเสกหายวับไปตามบรีฟเด๊ะ ๆ เลยงับ! 
-                await new_channel.send("✨ **พริ๊งงง~! ห้องแชทนี้ถูกชุบชีวิตใหม่เอี่ยมอ่องด้วยเวทมนตร์ของน้อน Doro เรียบร้อยแล้วค่ะ!** 🌸", delete_after=3)
-            except Exception as e:
-                logger.error(f"เกิดข้อผิดพลาดในการโคลนห้อง: {e}")
+                new_chan = await chan.clone(reason="Doro Reset Room")
+                await chan.delete()
+                await new_chan.edit(position=pos)
+                await new_chan.send("✨ **พริ๊งงง~! ห้องแชทนี้ถูกชุบชีวิตใหม่เอี่ยมอ่องเรียบร้อยแล้วค่ะ!** 🌸", delete_after=3)
+            except Exception: pass
             return
 
     except Exception as e:
-        logger.error(f"เกิดข้อผิดพลาดร้ายแรงในระบบประมวลคำสั่ง: {e}")
+        logger.error(f"Error: {e}")
 
-# รันเว็บเซิร์ฟเวอร์เปิดบอทตลอด 24 ชม. และสตาร์ท Discord Bot
 server_on()
 bot.run(DISCORD_TOKEN)
