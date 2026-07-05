@@ -754,7 +754,7 @@ async def on_message(message: discord.Message):
                 await message.channel.send(f"❌ พลังลบข้อความล้มเหลว: {e}")
             return
 
-        # --- 8. [NEW FIXED] คำสั่งรีเซ็ตชุบชีวิตห้องแชทใหม่ ---
+        # --- 8. คำสั่งรีเซ็ตชุบชีวิตห้องแชทใหม่ ---
         if lower_msg == "doro รีเซ็ตห้อง":
             if not message.author.guild_permissions.manage_channels:
                 await message.channel.send("❌ เฉพาะแอดมินหรือผู้จัดการห้องแชทเท่านั้นที่จะสั่งชุบชีวิตห้องใหม่ได้ค่ะ!", delete_after=5)
@@ -769,7 +769,9 @@ async def on_message(message: discord.Message):
                 new_channel = await current_channel.clone(reason="Doro ร่ายเวทมนตร์รีเซ็ตห้องแชทให้สะอาดเอี่ยม")
                 await current_channel.delete(reason="ห้องเก่าโดนรีเซ็ตเคลียร์ขยะ")
                 await new_channel.edit(position=position)
-                await new_channel.send("✨ **พริ๊งงง~! ห้องแชทนี้ถูกชุบชีวิตใหม่เอี่ยมอ่องด้วยเวทมนตร์ของน้อน Doro เรียบร้อยแล้วค่ะ!** 🌸")
+                
+                # ✨ เพิ่ม delete_after=3 ตรงนี้เพื่อให้ข้อความหายไปเองใน 3 วินาทีค๊าา!
+                await new_channel.send("✨ **พริ๊งงง~! ห้องแชทนี้ถูกชุบชีวิตใหม่เอี่ยมอ่องด้วยเวทมนตร์ของน้อน Doro เรียบร้อยแล้วค่ะ!** 🌸", delete_after=3)
             except Exception as e:
                 logger.error(f"เกิดข้อผิดพลาดในการโคลนห้อง: {e}")
             return
