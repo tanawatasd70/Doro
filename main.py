@@ -560,9 +560,9 @@ async def on_message(message: discord.Message):
             old_channel = message.channel
             new_channel = await old_channel.clone()
             await old_channel.delete()
-            await new_channel.send("💣 บู๊มมม!! เสกเวทมนตร์รีเซ็ตห้องใหม่เอี่ยมอ่องเรียบร้อยแล้วค๊าา~ ✨")
+            await new_channel.send("💣 บู๊มมม!! เสกเวทมนตร์รีเซ็ตห้องใหม่เอี่ยมอ่องเรียบร้อยแล้วค๊าา~ ✨", delete_after=3)
             return
-
+            
         if lower_msg == "doro คำสั่งเพลง":
             embed = discord.Embed(title="🎧 เมนูดนตรีของน้อน Doro (!คำสั่ง)", description="**!join** (เรียกหนูเข้าห้อง) / **!leave** (ไล่หนูไปพัก) / **!play <ชื่อเพลง>** (เปิดเพลงคิ้วท์ ๆ) / **!skip** (ข้ามเพลงเบื่อ) / **!stop** (ปิดวิทยุ) / **!pause** (หยุดแป๊บ) / **!resume** (เล่นต่อเลย) / **!queue** (ส่องคิวเพลง) / **!nowplaying** (เพลงที่กำลังเต้นอยู่)", color=discord.Color.red())
             await message.channel.send(embed=embed)
