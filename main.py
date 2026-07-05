@@ -65,7 +65,7 @@ def save_roblox_data(data):
 
 
 # ==========================================
-# 🎛️ NEW UI COMMAND MODE
+# 🎛️ MAIN UI COMMAND MENU
 # ==========================================
 class BotCommandControlSelect(discord.ui.Select):
     def __init__(self):
@@ -231,7 +231,6 @@ class RobloxServerSelect(discord.ui.Select):
             view = discord.ui.View()
             
             raw_label = f"👉 เข้า {game_data['name']}"
-            # ป้องกัน Label ของปุ่มลิ้งก์ยาวเกิน 45 ตัวอักษร
             button_label = raw_label[:45] if len(raw_label) > 0 else "👉 เข้าสู่เซิร์ฟเวอร์วี"
             
             view.add_item(discord.ui.Button(label=button_label, url=game_data['url'], style=discord.ButtonStyle.link))
@@ -257,7 +256,9 @@ class RobloxServerView(discord.ui.View):
         await interaction.response.send_modal(DeleteRobloxServerModal())
 
 
-# --- Dynamic Role System ---
+# ==========================================
+# 🛡️ ROLE MANAGEMENT SYSTEM
+# ==========================================
 class RoleSelect(discord.ui.Select):
     def __init__(self, guild):
         roles = [r for r in guild.roles if r.name != "@everyone" and not r.managed]
@@ -308,21 +309,33 @@ class RequestRoleView(discord.ui.View):
         self.add_item(RemoveRolesButton())
 
 
-# --- 📊 NEW Poll UI System ---
-class AskQuestionTextModal(discord.ui.Modal, title="✍️ รายละเอียดคำถามโพลแสนสนุก"):
-    question = discord.ui.TextInput(label="หัวข้อคำถามโพลนี้คืออะไรเอ่ย?", style=discord.TextStyle.short, placeholder="เย็นนี้ไปกินชาบูกันไหมค๊าา?")
-    choices_input = discord.ui.TextInput(
-        label="ตัวเลือกคำตอบ (แยกด้วยเครื่องหมายจุลภาค , น้าา)", 
-        style=discord.TextStyle.paragraph, 
-        placeholder="ไปเซ่, ไม่ว่างง่ะ, ชวนคนอื่นเถอะ"
-    )
-
+# ==========================================
+# 📊 [FIXED] POLL UI SYSTEM (แก้ไขจุดพังจากรูป)
+# ==========================================
+class AskQuestionTextModal(discord.ui.Modal):
     def __init__(self, parent_view):
-        super().__init__()
+        # แก้ไข: ส่งค่า Title ตรงเข้า Constructor ป้องกันโครงสร้างพังจนขึ้น Interaction Failed
+        super().__init__(title="✍️ รายละเอียดคำถามโพลแสนสนุก")
         self.parent_view = parent_view
 
+        # ประกาศช่องข้อความและใช้ add_item เพื่อความเสถียรสูงสุดตาม Discord API
+        self.question = discord.ui.TextInput(
+            label="หัวข้อคำถามโพลนี้คืออะไรเอ่ย?", 
+            style=discord.TextStyle.short, 
+            placeholder="เย็นนี้ไปกินชาบูกันไหมค๊าา?",
+            required=True
+        )
+        self.choices_input = discord.ui.TextInput(
+            label="ตัวเลือกคำตอบ (แยกด้วยเครื่องหมายจุลภาค , น้าา)", 
+            style=discord.TextStyle.paragraph, 
+            placeholder="ไปเซ่, ไม่ว่างง่ะ, ชวนคนอื่นเถอะ",
+            required=True
+        )
+        self.add_item(self.question)
+        self.add_item(self.choices_input)
+
     async def on_submit(self, interaction: discord.Interaction):
-        self.parent_view.question_text = self.question.value
+        self.parent_view.question_text = self.question.value.strip()
         parsed_choices = [c.strip() for c in self.choices_input.value.split(",") if c.strip()]
         
         if len(parsed_choices) < 2:
@@ -339,6 +352,7 @@ class OpenQuestionModalButton(discord.ui.Button):
         self.parent_view = parent_view
 
     async def callback(self, interaction: discord.Interaction):
+        # เรียกเปิดหน้าต่างกรอกข้อมูลโพลที่แก้เรียบร้อยแล้ว
         await interaction.response.send_modal(AskQuestionTextModal(self.parent_view))
 
 class SubmitQuestionButton(discord.ui.Button):
@@ -400,7 +414,6 @@ class VoteSelect(discord.ui.Select):
 
         await interaction2.response.send_message(f"✅ น้อน Doro กาหัวใจและบันทึกคะแนนให้เรียบร้อยแล้วค่ะ!", ephemeral=True, delete_after=2)
 
-# [แก้ไขสมบูรณ์] ล็อกความยาวและสร้าง State เก็บคอนเทนต์ห้อง ป้องกันบักการโต้ตอบล้มเหลว
 class AskQuestionView(discord.ui.View):
     def __init__(self, guild):
         super().__init__(timeout=None)
@@ -469,7 +482,9 @@ class AskQuestionView(discord.ui.View):
             await interaction.response.send_message(f"❌ เกิดข้อผิดพลาดระบบ HTTP: {e}", ephemeral=True)
 
 
-# --- Vote Kick UI System ---
+# ==========================================
+# 🚫 VOTE KICK SYSTEM
+# ==========================================
 class MemberSelect(discord.ui.UserSelect):
     def __init__(self, guild):
         super().__init__(placeholder="👤 จิ้มเลือกคนที่ไม่น่ารักตรงนี้เลยงับ...", min_values=1, max_values=1, custom_id="kick_member_select")
@@ -505,7 +520,6 @@ class MemberSelectView(discord.ui.View):
 class KickTypeButton(discord.ui.Button):
     def __init__(self, target: discord.Member, kick_type: str, required_votes: int):
         label_str = "🔊 เตะออกจากห้องเสียง" if kick_type == "voice" else "💥 ดีดออกจากเซิร์ฟเวอร์"
-        # บังคับความยาวของปุ่มตัดคำเซฟตี้ ไม่ให้เกิน 45 ตัวอักษรอย่างแน่นอนเพื่อป้องกัน HTTP 400
         safe_label = label_str[:45]
         
         style = discord.ButtonStyle.primary if kick_type == "voice" else discord.ButtonStyle.danger
@@ -576,7 +590,9 @@ class VoteProgressView(discord.ui.View):
             await interaction.response.edit_message(embed=embed, view=self)
 
 
-# --- Message Handling Events ---
+# ==========================================
+# ⚙️ SYSTEM CORE & EVENTS
+# ==========================================
 @bot.event
 async def on_ready():
     logger.info(f"Doro UI Engine active as {bot.user}")
@@ -633,6 +649,6 @@ async def on_message(message: discord.Message):
     except Exception as e:
         logger.error(f"เกิดข้อผิดพลาดในระบบข้อความ: {e}")
 
-# รัน Server และบอท
+# รันเว็บเซิร์ฟเวอร์เปิดบอทตลอด 24 ชม. และสตาร์ท Discord Bot
 server_on()
 bot.run(DISCORD_TOKEN)
