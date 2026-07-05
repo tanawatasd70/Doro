@@ -104,6 +104,7 @@ class BotCommandControlSelect(discord.ui.Select):
         options = [
             discord.SelectOption(label="🛡️ เปิดระบบจัดการ/ขอยศ", description="เรียกเมนู Dropdown เลือกรับยศ และปุ่มขอยศ", value="setup_roles"),
             discord.SelectOption(label="📊 เปิดระบบสร้างคำถามโพล", description="เรียกเมนูตั้งค่าโพล โหวตเลือกคำตอบ", value="setup_poll"),
+            discord.SelectOption(label="🚫 เริ่มวาระโหวตเตะสมาชิก", description="เลือกสมาชิกเพื่อเริ่มโหวตเตะออกจากห้องเสียง/เซิร์ฟเวอร์", value="setup_kick"),
             discord.SelectOption(label="📖 ดูคู่มือคำสั่งบอททั้งหมด", description="แสดงรายละเอียดคำสั่งตัวอักษรของบอท", value="show_commands")
         ]
         super().__init__(placeholder="🎛️ เลือกโหมดคำสั่งที่ต้องการใช้งาน...", min_values=1, max_values=1, options=options)
@@ -125,16 +126,25 @@ class BotCommandControlSelect(discord.ui.Select):
             view = AskQuestionView(interaction.guild)
             await interaction.response.send_message("📋 **ตั้งค่าระบบโพลคำถาม:** โปรดเลือกเงื่อนไขด้านล่างให้ครบถ้วนก่อนส่งคำถาม", view=view, ephemeral=True)
             
+        elif value == "setup_kick":
+            embed = discord.Embed(
+                title="🚫 ระบบโหวตเตะสมาชิก (UI Mode)",
+                description="โปรดเลือกรายชื่อสมาชิกที่คุณต้องการเริ่มโหวตลงมติเตะด้านล่างนี้ได้เลยครับ",
+                color=discord.Color.red()
+            )
+            view = MemberSelectView(interaction.guild)
+            await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
+
         elif value == "show_commands":
             embed = discord.Embed(
                 title="📘 คำสั่งของ Doro 🤖",
                 description=(
                     "**🔹 bot ชื่ออะไร** / **doro ช่วยอะไรได้บ้าง** / **doro สวัสดี**\n"
-                    "**🔹 doro เมนู** : เปิดแผงควบคุม UI สำหรับขอยศ สร้างโพลคำถาม\n"
+                    "**🔹 doro เมนู** : เปิดแผงควบคุม UI สำหรับขอยศ สร้างโพลคำถาม โหวตเตะคน\n"
                     "**🔹 doro ค้นหา <ชื่อคลิป>**\n"
                     "**🔹 doro สมาชิกทั้งหมด**\n"
                     "**🔹 doro เวลา**\n"
-                    "**🔹 doro โหวตเตะ <@ชื่อ>** : โหวตเตะคนออกจากเซิร์ฟเวอร์/ห้องเสียง\n"
+                    "**🔹 doro โหวตเตะ** : เรียกหน้าต่าง UI เพื่อโหวตเตะสมาชิก\n"
                     "**🔹 doroส่งข้อความ <ช่อง_id> <ข้อความ>** *(แอดมิน)*\n"
                     "**🔹 doro ล้างข้อความ <จำนวน>** *(ผู้จัดการข้อความ)*\n"
                     "**🔹 doro รีเซ็ตchannel**\n"
@@ -260,7 +270,7 @@ class VoteSelect(discord.ui.Select):
         for ans in summary:
             voters = summary[ans]
             summary_text += f"**{ans}**: {len(voters)} โหวต\n"
-            if voters: summary_text += "  ↳ " + ", ".join(voters) + "\n"
+            if voters: summary_text += "   ↳ " + ", ".join(voters) + "\n"
 
         result_channel = guild.get_channel(self.result_channel_id) if guild else None
         if result_channel:
@@ -315,6 +325,42 @@ class AskQuestionView(discord.ui.View):
 
 
 # --- Vote Kick UI System ---
+class MemberSelect(discord.ui.UserSelect):
+    def __init__(self, guild):
+        super().__init__(placeholder="👤 เลือกสมาชิกที่ต้องการโหวตลงโทษ...", min_values=1, max_values=1)
+        self.guild = guild
+
+    async def callback(self, interaction: discord.Interaction):
+        target_member = self.values[0]
+        
+        # ตรวจสอบเบื้องต้น
+        if target_member.id == interaction.user.id:
+            return await interaction.response.send_message("จะโหวตเตะตัวเองไม่ได้นะ! 😂", ephemeral=True)
+        if target_member.bot:
+            return await interaction.response.send_message("บอทเป็นอมตะ โหวตเตะไม่ได้หรอกนะ 🤖", ephemeral=True)
+
+        # ดึง Member object เต็มๆ เพื่อเช็คสถานะออนไลน์
+        member_obj = interaction.guild.get_member(target_member.id)
+        if not member_obj:
+            return await interaction.response.send_message("❌ ไม่พบสมาชิกคนนี้ในเซิร์ฟเวอร์", ephemeral=True)
+
+        online_members = [m for m in self.guild.members if m.status != discord.Status.offline and not m.bot]
+        required_votes = max(2, len(online_members) // 2 + 1)
+
+        view = VoteKickTypeView(member_obj, required_votes)
+        
+        embed = discord.Embed(
+            title="🛠️ ตั้งค่าระบบประชามติโหวตเตะ",
+            description=f"เป้าหมาย: {member_obj.mention}\nโปรดกดปุ่มด้านล่างเพื่อเลือกรูปแบบมาตรการลงทัณฑ์",
+            color=0xF1C40F
+        )
+        await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
+
+class MemberSelectView(discord.ui.View):
+    def __init__(self, guild):
+        super().__init__(timeout=60)
+        self.add_item(MemberSelect(guild))
+
 class KickTypeButton(discord.ui.Button):
     def __init__(self, target: discord.Member, kick_type: str, required_votes: int):
         label_str = "🔊 เตะออกจากห้องเสียง" if kick_type == "voice" else "💥 เตะออกจากเซิร์ฟเวอร์"
@@ -332,9 +378,12 @@ class KickTypeButton(discord.ui.Button):
             color=discord.Color.red()
         )
         embed.add_field(name="เกณฑ์ผลการลงคะแนนในขณะนี้", value=f"🟢 เห็นด้วย (Vote): 0/{self.required_votes}")
+        
         if self.view:
             for item in self.view.children: item.disabled = True
             await interaction.response.edit_message(view=self.view)
+            
+        # ส่งกระดานคะแนนแบบเปิดเผยลงห้องแชทสาธารณะเพื่อให้ทุกคนร่วมกดโหวต
         await interaction.channel.send(embed=embed, view=view)
 
 class VoteKickTypeView(discord.ui.View):
@@ -406,37 +455,22 @@ async def on_message(message: discord.Message):
         if lower_msg == "doro เมนู":
             embed = discord.Embed(
                 title="⚙️ Doro แผงควบคุมระบบอัจฉริยะ (UI Mode)",
-                description="ยินดีต้อนรับสู่โหมด UI! คุณสามารถกดเลือกเมนูด้านล่างนี้เพื่อเปิดใช้งานฟังก์ชันรับยศ, ส่งโพลคำถาม หรือดูคู่มือการใช้งานบอทได้อย่างรวดเร็วครับ",
+                description="ยินดีต้อนรับสู่โหมด UI! คุณสามารถกดเลือกเมนูด้านล่างนี้เพื่อเปิดใช้งานฟังก์ชันรับยศ, ส่งโพลคำถาม หรือเปิดระบบโหวตเตะสมาชิกได้อย่างรวดเร็วครับ",
                 color=0x3498DB
             )
             view = BotControlMenuView(message.guild)
             await message.channel.send(embed=embed, view=view)
             return
 
-        if lower_msg.startswith("doro โหวตเตะ"):
-            guild = message.guild
-            if guild is None: return
-
-            target_member = None
-            if message.mentions:
-                target_member = message.mentions[0]
-            else:
-                search_name = msg[len("doro โหวตเตะ"):].strip()
-                if search_name:
-                    target_member = discord.utils.find(lambda m: search_name in m.display_name or search_name in m.name, guild.members)
-
-            if not target_member:
-                await message.channel.send("❗ ระบุเป้าหมายโดย Mention ชื่อ เช่น `doro โหวตเตะ @ชื่อเพื่อน`")
-                return
-            if target_member.id == message.author.id:
-                await message.channel.send("จะโหวตเตะตัวเองไม่ได้นะ! 😂")
-                return
-
-            online_members = [m for m in guild.members if m.status != discord.Status.offline and not m.bot]
-            required_votes = max(2, len(online_members) // 2 + 1)
-
-            view = VoteKickTypeView(target_member, required_votes)
-            await message.channel.send(f"🛠️ โปรดระบุประเภทการโหวตลงโทษ {target_member.mention}:", view=view)
+        # คำสั่งโหวตเตะแบบใหม่ผ่านระบบ UI Dropdown
+        if lower_msg == "doro โหวตเตะ":
+            embed = discord.Embed(
+                title="🚫 เริ่มวาระโหวตเตะสมาชิก (UI Mode)",
+                description="โปรดเลือกรายชื่อสมาชิกที่คุณต้องการเริ่มโหวตลงมติเตะจากเมนูด้านล่างนี้ครับ",
+                color=discord.Color.red()
+            )
+            view = MemberSelectView(message.guild)
+            await message.channel.send(embed=embed, view=view)
             return
 
         # --- คำสั่งพื้นฐานเดิม ---
