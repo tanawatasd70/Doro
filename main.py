@@ -32,8 +32,15 @@ bot = commands.Bot(command_prefix="!", intents=intents)
 # --- Global Data ---
 custom_responses = {
     "bot ชื่ออะไร": "หนูชื่อ Doro ค่ะ! เป็นยัยบอทสุดน่ารักของทุกคนน~ 🤖💕",
+    "whats your name": "หนูชื่อ Doro ค่ะ! เป็นยัยบอทสุดน่ารักของทุกคนน~ 🤖💕",
+    "what is your name": "หนูชื่อ Doro ค่ะ! เป็นยัยบอทสุดน่ารักของทุกคนน~ 🤖💕",
+    
     "doro ช่วยอะไรได้บ้าง": "หนูช่วยตอบคำถามทั่วไป เปิดเพลงเพราะ ๆ ให้ฟัง แล้วก็ช่วยดูแลเซิร์ฟเวอร์ได้ด้วยนะค๊าา! 🎵✨",
+    "doro help": "หนูช่วยตอบคำถามทั่วไป เปิดเพลงเพราะ ๆ ให้ฟัง แล้วก็ช่วยดูแลเซิร์ฟเวอร์ได้ด้วยนะค๊าา! 🎵✨",
+    
     "doro สวัสดี": "งื้อออ สวัสดีค่าา! ยินดีที่ได้คุยด้วยนะคะ วันนี้มีอะไรให้หนูช่วยไหมเอ่ย? 🌸",
+    "doro hello": "งื้อออ สวัสดีค่าา! ยินดีที่ได้คุยด้วยนะคะ วันนี้มีอะไรให้หนูช่วยไหมเอ่ย? 🌸",
+    "doro hi": "งื้อออ สวัสดีค่าา! ยินดีที่ได้คุยด้วยนะคะ วันนี้มีอะไรให้หนูช่วยไหมเอ่ย? 🌸",
 }
 
 user_contexts = {}
@@ -123,16 +130,18 @@ class BotCommandControlSelect(discord.ui.Select):
             embed = discord.Embed(
                 title="📘 สมุดคู่มือของน้อน Doro 🤖✨",
                 description=(
-                    "**🔹 bot ชื่ออะไร** / **doro ช่วยอะไรได้บ้าง** / **doro สวัสดี**\n"
-                    "**🔹 doro เมนู** : เปิดแผงควบคุม UI น่ารัก ๆ สำหรับขอยศ สร้างโพล หรือลิงก์ Roblox\n"
-                    "**🔹 doro ค้นหา <ชื่อคลิป>** : ค้นหาคลิปวิดีโอให้คุณ\n"
-                    "**🔹 doro สมาชิกทั้งหมด** : ดูสถิติคนในเซิร์ฟเวอร์แบบตะมุตะมิ\n"
-                    "**🔹 doro เวลา** : เช็กเวลาปัจจุบัน\n"
-                    "**🔹 doro โหวตเตะ** : เรียกหน้าต่าง UI แปะป้ายคนไม่น่ารัก\n"
-                    "**🔹 doro ส่งข้อความ <ช่อง_id> <ข้อความ>** *(คุณแอดมิน)*\n"
-                    "**🔹 doro ลบข้อความ <จำนวน>** *(คุณผู้จัดการข้อความ)*\n"
-                    "**🔹 doro รีเซ็ตห้อง** : ชุบชีวิตห้องแชทใหม่\n"
-                    "**🔹 doro คำสั่งเพลง** : ดูชุดคำสั่งเสียงดนตรี !play !skip !stop ทั้งหมดเจ้าค่ะ"
+                    "**🔹 bot ชื่ออะไร / whats your name**\n"
+                    "**🔹 doro ช่วยอะไรได้บ้าง / doro help**\n"
+                    "**🔹 doro สวัสดี / doro hello / doro hi**\n"
+                    "**🔹 doro เมนู / doro menu** : เปิดแผงควบคุม UI น่ารัก ๆ สำหรับขอยศ สร้างโพล หรือลิงก์ Roblox\n"
+                    "**🔹 doro ค้นหา / doro search <ชื่อคลิป>** : ค้นหาคลิปวิดีโอให้คุณ\n"
+                    "**🔹 doro สมาชิกทั้งหมด / doro member** : ดูสถิติคนในเซิร์ฟเวอร์แบบตะมุตะมิ\n"
+                    "**🔹 doro เวลา / doro time** : เช็กเวลาปัจจุบัน\n"
+                    "**🔹 doro โหวตเตะ / doro votekick** : เรียกหน้าต่าง UI แปะป้ายคนไม่น่ารัก\n"
+                    "**🔹 doro ส่งข้อความ / doro send <ช่อง_id> <ข้อความ>** *(คุณแอดมิน)*\n"
+                    "**🔹 doro ลบข้อความ / doro clear <จำนวน>** *(คุณผู้จัดการข้อความ)*\n"
+                    "**🔹 doro รีเซ็ตห้อง / doro reset** : ชุบชีวิตห้องแชทใหม่ (หายใน 3 วินาที)\n"
+                    "**🔹 doro คำสั่งเพลง / doro music** : ดูชุดคำสั่งเสียงดนตรี !play !skip !stop ทั้งหมดเจ้าค่ะ"
                 ),
                 color=discord.Color.magenta()
             )
@@ -370,6 +379,7 @@ class OpenQuestionModalButton(discord.ui.Button):
         self.parent_view = parent_view
 
     async def callback(self, interaction: discord.Interaction):
+        await self.parent_view.guild.fetch_member(interaction.user.id)
         await interaction.response.send_modal(AskQuestionTextModal(self.parent_view))
 
 class SubmitQuestionButton(discord.ui.Button):
@@ -608,7 +618,7 @@ class VoteProgressView(discord.ui.View):
 
 
 # ==========================================
-# ⚙️ SYSTEM CORE & EVENTS (FIXED ON_MESSAGE)
+# ⚙️ SYSTEM CORE & EVENTS (DUAL LANGUAGE)
 # ==========================================
 @bot.event
 async def on_ready():
@@ -626,13 +636,13 @@ async def on_message(message: discord.Message):
     if len(user_contexts[user_id]) > 5: user_contexts[user_id].pop(0)
 
     try:
-        # --- 1. คำสั่งตอบกลับทั่วไปแบบคุยเล่น ---
+        # --- 1. คำสั่งตอบกลับทั่วไปแบบคุยเล่น (เช็กคีย์เวิร์ดตรง ๆ) ---
         if lower_msg in custom_responses:
             await message.channel.send(custom_responses[lower_msg])
             return
 
-        # --- 2. คำสั่งหลักและแผงควบคุม UI ---
-        if lower_msg == "doro เมนู":
+        # --- 2. คำสั่งหลักและแผงควบคุม UI (รองรับ 2 ภาษา) ---
+        if lower_msg in ["doro เมนู", "doro menu"]:
             embed = discord.Embed(
                 title="⚙️ Doro แผงควบคุมระบบอัจฉริยะสุดน่ารัก (UI Mode)",
                 description="ยินดีต้อนรับสู่ดินแดนแห่งความน่ารักค๊าา! เลือกเมนูด้านล่างนี้เพื่อเปิดใช้งานฟังก์ชันได้ตามใจชอบเลยนะค๊าา ✨",
@@ -642,7 +652,7 @@ async def on_message(message: discord.Message):
             await message.channel.send(embed=embed, view=view)
             return
 
-        if lower_msg == "doro โหวตเตะ":
+        if lower_msg in ["doro โหวตเตะ", "doro votekick"]:
             embed = discord.Embed(
                 title="🚫 เริ่มวาระโหวตเตะสมาชิกคนไม่ดี (UI Mode)",
                 description="โปรดเลือกรายชื่อสมาชิกที่คุณต้องการเริ่มโหวตลงมติเตะจากเมนูด้านล่างนี้ได้เลยค่ะงึมมม",
@@ -652,7 +662,7 @@ async def on_message(message: discord.Message):
             await message.channel.send(embed=embed, view=view)
             return
 
-        if lower_msg == "doro สมาชิกทั้งหมด":
+        if lower_msg in ["doro สมาชิกทั้งหมด", "doro member"]:
             guild = message.guild
             if guild is None: return
             
@@ -669,16 +679,16 @@ async def on_message(message: discord.Message):
             await message.channel.send(embed=embed)
             return
 
-        # --- 3. [NEW FIXED] คำสั่งดึงเวลาปัจจุบัน ---
-        if lower_msg == "doro เวลา":
+        # --- 3. คำสั่งดึงเวลาปัจจุบัน ---
+        if lower_msg in ["doro เวลา", "doro time"]:
             tz = pytz.timezone("Asia/Bangkok")
             now = datetime.now(tz)
             time_str = now.strftime("%H:%M:%S น. (%d/%m/%Y)")
             await message.channel.send(f"⏰ เวลาปัจจุบันของบ้านเราคือ **{time_str}** ค่ะน้าา!")
             return
 
-        # --- 4. [NEW FIXED] คำสั่งคู่มือเพลงประจำตัวบอท ---
-        if lower_msg == "doro คำสั่งเพลง":
+        # --- 4. คำสั่งคู่มือเพลงประจำตัวบอท ---
+        if lower_msg in ["doro คำสั่งเพลง", "doro music"]:
             embed = discord.Embed(
                 title="🎵 คู่มือเปิดเพลงแสนสุนทรีย์ของน้อน Doro 🎶",
                 description=(
@@ -692,11 +702,14 @@ async def on_message(message: discord.Message):
             await message.channel.send(embed=embed)
             return
 
-        # --- 5. [NEW FIXED] คำสั่งค้นหาคลิปวิดีโอ YouTube ---
-        if lower_msg.startswith("doro ค้นหา"):
-            search_query = msg[10:].strip()
+        # --- 5. คำสั่งค้นหาคลิปวิดีโอ YouTube ---
+        if lower_msg.startswith("doro ค้นหา") or lower_msg.startswith("doro search"):
+            # ตัดคำค้นหาออกตามความยาวของ prefix ค๊าา
+            start_idx = 11 if lower_msg.startswith("doro search") else 10
+            search_query = msg[start_idx:].strip()
+            
             if not search_query:
-                await message.channel.send("❗ งื้ออ ลืมบอกหนูว่าอยากให้ค้นหาคำว่าอะไรค๊าา! เช่น `doro ค้นหา มิกุ`")
+                await message.channel.send("❗ งื้ออ ลืมบอกหนูว่าอยากให้ค้นหาคำว่าอะไรค๊าา! เช่น `doro ค้นหา มิกุ` หรือ `doro search miku`")
                 return
             await message.channel.send(f"🔍 น้อน Doro กำลังดำน้ำหาคลิป `{search_query}` ใน YouTube ให้แป๊บน้าา...")
             try:
@@ -711,15 +724,15 @@ async def on_message(message: discord.Message):
                 await message.channel.send(f"❌ เกิดข้อผิดพลาดในระบบค้นหาคลิป: {e}")
             return
 
-        # --- 6. [NEW FIXED] คำสั่งแอดมินส่งข้อความผ่านบอท ---
-        if lower_msg.startswith("doro ส่งข้อความ") or lower_msg.startswith("doroส่งข้อความ"):
+        # --- 6. คำสั่งแอดมินส่งข้อความผ่านบอท ---
+        if lower_msg.startswith("doro ส่งข้อความ") or lower_msg.startswith("doroส่งข้อความ") or lower_msg.startswith("doro send"):
             if not message.author.guild_permissions.administrator:
                 await message.channel.send("❌ คำสั่งส่งข้อความลับนี้ เฉพาะคุณแอดมินผู้น่าเกรงขามเท่านั้นน้าา!", delete_after=5)
                 return
             
             parts = msg.split(maxsplit=3)
             if len(parts) < 4:
-                await message.channel.send("❗ ใส่รูปแบบคำสั่งไม่ครบค่ะงับ! วิธีใช้: `doroส่งข้อความ <ช่อง_id> <ข้อความ>`")
+                await message.channel.send("❗ ใส่รูปแบบคำสั่งไม่ครบค่ะงับ! วิธีใช้: `doroส่งข้อความ <ช่อง_id> <ข้อความ>` หรือ `doro send <ช่อง_id> <ข้อความ>`")
                 return
             
             try:
@@ -735,15 +748,15 @@ async def on_message(message: discord.Message):
                 await message.channel.send("❌ รูปแบบไอดีห้องแชทไม่ถูกต้องงับบ")
             return
 
-        # --- 7. [NEW FIXED] คำสั่งลบข้อความด่วน ---
-        if lower_msg.startswith("doro ลบข้อความ"):
+        # --- 7. คำสั่งลบข้อความด่วน ---
+        if lower_msg.startswith("doro ลบข้อความ") or lower_msg.startswith("doro clear"):
             if not message.author.guild_permissions.manage_messages:
                 await message.channel.send("❌ โธ่.. คุณไม่มีสิทธิ์จัดการข้อความน้าา สั่งลบไม่ได้งับบ", delete_after=5)
                 return
             
             parts = lower_msg.split()
             if len(parts) < 3:
-                await message.channel.send("❗ ลืมระบุจำนวนข้อความที่จะให้ลบค๊าา! เช่น `doro ลบข้อความ 10`")
+                await message.channel.send("❗ ลืมระบุจำนวนข้อความที่จะให้ลบค๊าา! เช่น `doro ลบข้อความ 10` หรือ `doro clear 10`")
                 return
                 
             try:
@@ -754,8 +767,8 @@ async def on_message(message: discord.Message):
                 await message.channel.send(f"❌ พลังลบข้อความล้มเหลว: {e}")
             return
 
-        # --- 8. คำสั่งรีเซ็ตชุบชีวิตห้องแชทใหม่ ---
-        if lower_msg == "doro รีเซ็ตห้อง":
+        # --- 8. คำสั่งรีเซ็ตชุบชีวิตห้องแชทใหม่ (ลบข้อความเปิดตัวใน 3 วินาทีอัตโนมัติ) ---
+        if lower_msg in ["doro รีเซ็ตห้อง", "doro reset"]:
             if not message.author.guild_permissions.manage_channels:
                 await message.channel.send("❌ เฉพาะแอดมินหรือผู้จัดการห้องแชทเท่านั้นที่จะสั่งชุบชีวิตห้องใหม่ได้ค่ะ!", delete_after=5)
                 return
@@ -770,7 +783,7 @@ async def on_message(message: discord.Message):
                 await current_channel.delete(reason="ห้องเก่าโดนรีเซ็ตเคลียร์ขยะ")
                 await new_channel.edit(position=position)
                 
-                # ✨ เพิ่ม delete_after=3 ตรงนี้เพื่อให้ข้อความหายไปเองใน 3 วินาทีค๊าา!
+                # ข้อความนี้จะแว๊บขึ้นมาแจ้ง 3 วินาทีแล้วจางหายไปตามสั่งเลยค๊าา! 🪄
                 await new_channel.send("✨ **พริ๊งงง~! ห้องแชทนี้ถูกชุบชีวิตใหม่เอี่ยมอ่องด้วยเวทมนตร์ของน้อน Doro เรียบร้อยแล้วค่ะ!** 🌸", delete_after=3)
             except Exception as e:
                 logger.error(f"เกิดข้อผิดพลาดในการโคลนห้อง: {e}")
