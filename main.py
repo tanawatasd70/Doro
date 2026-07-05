@@ -34,7 +34,9 @@ custom_responses = {
     "doro สวัสดี": "สวัสดีค่ะ ยินดีที่ได้คุยด้วยนะ!",
 }
 
-ROLE_OPTIONS = [
+# Dynamic roles: ROLE_OPTIONS removed.
+ROLE_OPTIONS = []  # no longer used
+#
     {"label": "จักพรรดิสวรรค์", "value": "จักพรรดิสวรรค์", "emoji": "🌸"},
     {"label": "ผู้คุมกฎ", "value": "ผู้คุมกฎ", "emoji": "✍️"},
     {"label": "สวรรค์และโลก", "value": "สวรรค์และโลก", "emoji": "🟧"},
@@ -379,7 +381,7 @@ async def on_message(message: discord.Message):
                 description="นายเลือกยศจากเมนูด้านล่าง หรือกดปุ่มเพื่อกรอกเหตุผลขอยศนี้ได้นะ",
                 color=0xFFB6C1
             )
-            view = RequestRoleView()
+            view = RequestRoleView(message.guild)
             await message.channel.send(embed=embed, view=view)
             return
 
@@ -667,3 +669,44 @@ if __name__ == "__main__":
         logger.exception("Error starting server_on() (may be fine if not needed)")
     bot.run(DISCORD_TOKEN)
 
+
+# ===== Dynamic Role System Patch =====
+class RoleSelect(discord.ui.Select):
+    def __init__(self, guild):
+        roles = [
+            r for r in guild.roles
+            if r.name != "@everyone" and not r.managed
+        ]
+        options = [
+            discord.SelectOption(label=r.name, value=str(r.id))
+            for r in roles[:25]
+        ]
+        super().__init__(
+            placeholder="เลือกยศ",
+            min_values=1,
+            max_values=1,
+            options=options
+        )
+
+    async def callback(self, interaction):
+        role = interaction.guild.get_role(int(self.values[0]))
+        if role is None:
+            return await interaction.response.send_message("ไม่พบยศ", ephemeral=True)
+        try:
+            await interaction.user.add_roles(role)
+            await interaction.response.send_message(
+                f"ได้รับยศ {role.name} แล้ว", ephemeral=True
+            )
+        except discord.Forbidden:
+            await interaction.response.send_message(
+                "บอทไม่มีสิทธิ์ให้ยศ (ตรวจสอบ Manage Roles และลำดับยศ)", ephemeral=True
+            )
+
+class RequestRoleView(discord.ui.View):
+    def __init__(self, guild):
+        super().__init__(timeout=None)
+        self.add_item(RoleSelect(guild))
+        self.add_item(RequestRoleButton())
+        self.add_item(TextInputButton())
+        self.add_item(RemoveRolesButton())
+# ===== End Patch =====
