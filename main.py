@@ -95,6 +95,12 @@ class BotCommandControlSelect(discord.ui.Select):
         value = self.values[0]
         current_guild = interaction.guild
         
+        # 🔥 ดักลบแผงควบคุมหลัก (UI Mode อันบนสุดในรูป image_1cdb24.png) ทิ้งทันทีที่กดยืนยัน!
+        try:
+            await interaction.message.delete()
+        except Exception:
+            pass  # กันเหนียวเผื่อบอทไม่มีสิทธิ์ลบข้อความเก่าในห้องแชทนั้น ๆ งับ
+
         if value == "setup_roles":
             embed = discord.Embed(
                 title="🛡️ ระบบจัดการยศอัตโนมัติค๊าา",
@@ -102,10 +108,12 @@ class BotCommandControlSelect(discord.ui.Select):
                 color=0xFFB6C1
             )
             view = RequestRoleView(current_guild)
-            await interaction.response.send_message(embed=embed, view=view)
+            # เปลี่ยนจาก interaction.response.send_message เป็นการส่งเข้าแชทหลักตรงๆ แทน เพราะเราลบ message หลักไปแล้วค๊าา
+            await interaction.channel.send(embed=embed, view=view)
             
         elif value == "setup_poll":
             view = AskQuestionView(current_guild)
+            # ส่งเป็น Ephemeral (เห็นคนเดียว) เหมือนเดิม เพื่อความเป็นส่วนตัวของคนสร้างโพล
             await interaction.response.send_message("📋 **ตั้งค่าระบบโพลคำถามน้าา:** โปรดเลือกห้องแชทและกรอกข้อมูลคำถามให้ครบถ้วนก่อนน้อน Doro จะปล่อยโพลนะค๊าา", view=view, ephemeral=True)
             
         elif value == "roblox_servers":
@@ -130,18 +138,14 @@ class BotCommandControlSelect(discord.ui.Select):
             embed = discord.Embed(
                 title="📘 สมุดคู่มือของน้อน Doro 🤖✨ (ระบบดักคำผิดเปิดใช้งานแล้ว)",
                 description=(
-                    "**🔹 bot ชื่ออะไร / whats your name**\n"
-                    "**🔹 doro ช่วยอะไรได้บ้าง / doro help**\n"
-                    "**🔹 doro สวัสดี / doro hello / doro hi**\n"
-                    "**🔹 doro เมนู / doro menu** *(พิมพ์ผิดเป็น เมณู, เเมนู, munu ก็ติด)* : เปิดแผงควบคุม UI\n"
+                    "**🔹 doro เมนู / doro menu** : เปิดแผงควบคุม UI\n"
                     "**🔹 doro ค้นหา / doro search <ข้อความ>** : ดำน้ำหาคลิป YouTube\n"
-                    "**🔹 doro สมาชิกทั้งหมด / doro member** *(พิมพ์ผิดเป็น สะมาชิก, mamber ก็ติด)* : ดูสถิติคนในเซิร์ฟ\n"
+                    "**🔹 doro สมาชิกทั้งหมด / doro member** : ดูสถิติคนในเซิร์ฟ\n"
                     "**🔹 doro เวลา / doro time** : เช็กเวลาปัจจุบัน\n"
-                    "**🔹 doro โหวตเตะ / doro votekick** *(พิมพ์ผิดเป็น โหวดเตะ, vote ก็ติด)* : เรียกหน้าต่างโหวตเตะคนไม่น่ารัก\n"
-                    "**🔹 doro ส่งข้อความ / doro send <ช่อง_id> <ข้อความ>** *(คุณแอดมิน)*\n"
-                    "**🔹 doro ลบข้อความ / doro clear <จำนวน>** *(คุณผู้จัดการข้อความ)*\n"
-                    "**🔹 doro รีเซ็ตห้อง / doro reset** *(พิมพ์ผิดเป็น รีเซตห้อง ก็ติด)* : ชุบชีวิตห้องแชทใหม่ (หายใน 3 วินาที)\n"
-                    "**🔹 doro คำสั่งเพลง / doro music** : ดูชุดคำสั่งเสียงดนตรี !play !skip !stop ทั้งหมดเจ้าค่ะ"
+                    "**🔹 doro โหวตเตะ / doro votekick** : เรียกหน้าต่างโหวตเตะคนไม่น่ารัก\n"
+                    "**🔹 doro ลบข้อความ / doro clear <จำนวน>**\n"
+                    "**🔹 doro รีเซ็ตห้อง / doro reset** : ชุบชีวิตห้องแชทใหม่ใน 3 วินาที\n"
+                    "**🔹 doro คำสั่งเพลง / doro music** : ดูชุดคำสั่งเปิดเพลง"
                 ),
                 color=discord.Color.magenta()
             )
