@@ -231,7 +231,8 @@ class RobloxServerSelect(discord.ui.Select):
             view = discord.ui.View()
             
             raw_label = f"👉 เข้า {game_data['name']}"
-            button_label = raw_label[:40] if len(raw_label) > 0 else "👉 เข้าสู่เซิร์ฟเวอร์วี"
+            # ป้องกัน Label ของปุ่มลิ้งก์ยาวเกิน 45 ตัวอักษร
+            button_label = raw_label[:45] if len(raw_label) > 0 else "👉 เข้าสู่เซิร์ฟเวอร์วี"
             
             view.add_item(discord.ui.Button(label=button_label, url=game_data['url'], style=discord.ButtonStyle.link))
             await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
@@ -399,66 +400,73 @@ class VoteSelect(discord.ui.Select):
 
         await interaction2.response.send_message(f"✅ น้อน Doro กาหัวใจและบันทึกคะแนนให้เรียบร้อยแล้วค่ะ!", ephemeral=True, delete_after=2)
 
-# [แก้ไขจุดบักตรงส่วนนี้] ล็อกความยาวและผูกมัด custom_id ป้องกันกิลด์เอ๋อ
+# [แก้ไขสมบูรณ์] ล็อกความยาวและสร้าง State เก็บคอนเทนต์ห้อง ป้องกันบักการโต้ตอบล้มเหลว
 class AskQuestionView(discord.ui.View):
     def __init__(self, guild):
         super().__init__(timeout=None)
         self.guild = guild
         self.question_text = None
         self.poll_choices = []
+        
+        self.target_channel_id = None
+        self.result_channel_id = None
 
         channels = [c for c in guild.channels if isinstance(c, discord.TextChannel)]
-        # ปรับแก้ให้ตัดชื่อห้องสั้นลงไม่เกิน 40 ตัวอักษร ป้องกัน String บวมเกินระบบ
         channel_options = [discord.SelectOption(label=f"#{ch.name}"[:40], value=str(ch.id)) for ch in channels[:25]]
         
         self.select_question_channel = discord.ui.Select(
             placeholder="📢 1. เลือกห้องที่จะให้น้อน Doro ไปปล่อยโพลค่ะ", 
             options=channel_options,
-            custom_id="poll_select_target_channel" # เติม Id บล็อกบั๊ก
+            custom_id="poll_select_target_channel"
         )
-        self.select_question_channel.callback = self.on_select_channel
+        self.select_question_channel.callback = self.on_select_target_channel
         self.add_item(self.select_question_channel)
 
         self.select_result_channel = discord.ui.Select(
             placeholder="📊 2. เลือกห้องที่จะให้สรุปคะแนนโหวตโชว์ค่ะ", 
             options=channel_options,
-            custom_id="poll_select_result_channel" # เติม Id บล็อกบั๊ก
+            custom_id="poll_select_result_channel"
         )
-        self.select_result_channel.callback = self.on_select_channel
+        self.select_result_channel.callback = self.on_select_result_channel
         self.add_item(self.select_result_channel)
 
         self.add_item(OpenQuestionModalButton(self))
         self.add_item(SubmitQuestionButton(self))
 
-    async def on_select_channel(self, interaction: discord.Interaction):
-        try:
-            await interaction.response.defer()  
-        except Exception:
-            pass
+    async def on_select_target_channel(self, interaction: discord.Interaction):
+        self.target_channel_id = int(self.select_question_channel.values[0])
+        await interaction.response.defer()  
+
+    async def on_select_result_channel(self, interaction: discord.Interaction):
+        self.result_channel_id = int(self.select_result_channel.values[0])
+        await interaction.response.defer()
 
     async def submit_question(self, interaction: discord.Interaction):
         if not self.question_text or not self.poll_choices:
             return await interaction.response.send_message("❗ งื้ออ อย่าเพิ่งใจร้อนสิคะ! กรอกคำถามและช้อยส์ผ่านปุ่มก่อนน้าา", ephemeral=True)
             
-        q_ch_id = int(self.select_question_channel.values[0]) if self.select_question_channel.values else None
-        r_ch_id = int(self.select_result_channel.values[0]) if self.select_result_channel.values else None
-
-        if not (q_ch_id and r_ch_id):
+        if not self.target_channel_id or not self.result_channel_id:
             return await interaction.response.send_message("❗ ลืมเลือกห้องปล่อยคำถามหรือห้องสรุปผลด้วยน้าา", ephemeral=True)
 
-        q_channel = self.guild.get_channel(q_ch_id)
-        embed = discord.Embed(title="📢 น้อน Doro ขอเชิญชวนทุกคนมาร่วมลงประชามติกันค๊าา~", color=discord.Color.pink())
-        embed.add_field(name="❓ หัวข้อคำถามโพล", value=self.question_text, inline=False)
-        
-        choices_desc = "\n".join([f"🔹 {c}" for c in self.poll_choices])
-        embed.add_field(name="📦 รายการตัวเลือก", value=choices_desc, inline=False)
-        
-        vote_view = discord.ui.View(timeout=None)
-        vote_view.add_item(VoteSelect(self.poll_choices, r_ch_id, self.poll_choices))
-        
-        sent_msg = await q_channel.send(embed=embed, view=vote_view)
-        vote_records[sent_msg.id] = {}
-        await interaction.response.send_message(f"✅ บินไปปล่อยโพลเรียบร้อยแล้วที่ห้อง {q_channel.mention} น้าา ฟิ้วว~", ephemeral=True)
+        q_channel = self.guild.get_channel(self.target_channel_id)
+        if not q_channel:
+            return await interaction.response.send_message("❌ ไม่พบห้องแชทที่จะปล่อยโพลค๊าา บอทอาจไม่มีสิทธิ์เข้าถึง", ephemeral=True)
+
+        try:
+            embed = discord.Embed(title="📢 น้อน Doro ขอเชิญชวนทุกคนมาร่วมลงประชามติกันค๊าา~", color=discord.Color.pink())
+            embed.add_field(name="❓ หัวข้อคำถามโพล", value=self.question_text, inline=False)
+            
+            choices_desc = "\n".join([f"🔹 {c}" for c in self.poll_choices])
+            embed.add_field(name="📦 รายการตัวเลือก", value=choices_desc, inline=False)
+            
+            vote_view = discord.ui.View(timeout=None)
+            vote_view.add_item(VoteSelect(self.poll_choices, self.result_channel_id, self.poll_choices))
+            
+            sent_msg = await q_channel.send(embed=embed, view=vote_view)
+            vote_records[sent_msg.id] = {}
+            await interaction.response.send_message(f"✅ บินไปปล่อยโพลเรียบร้อยแล้วที่ห้อง {q_channel.mention} น้าา ฟิ้วว~", ephemeral=True)
+        except Exception as e:
+            await interaction.response.send_message(f"❌ เกิดข้อผิดพลาดระบบ HTTP: {e}", ephemeral=True)
 
 
 # --- Vote Kick UI System ---
@@ -496,10 +504,13 @@ class MemberSelectView(discord.ui.View):
 
 class KickTypeButton(discord.ui.Button):
     def __init__(self, target: discord.Member, kick_type: str, required_votes: int):
-        label_str = "🔊 เตะบินออกจากห้องเสียง" if kick_type == "voice" else "💥 ดีดเปรี้ยงออกจากเซิร์ฟเวอร์"
+        label_str = "🔊 เตะออกจากห้องเสียง" if kick_type == "voice" else "💥 ดีดออกจากเซิร์ฟเวอร์"
+        # บังคับความยาวของปุ่มตัดคำเซฟตี้ ไม่ให้เกิน 45 ตัวอักษรอย่างแน่นอนเพื่อป้องกัน HTTP 400
+        safe_label = label_str[:45]
+        
         style = discord.ButtonStyle.primary if kick_type == "voice" else discord.ButtonStyle.danger
         custom_id_str = f"kick_btn_{kick_type}_{target.id}"
-        super().__init__(label=label_str, style=style, custom_id=custom_id_str[:100])
+        super().__init__(label=safe_label, style=style, custom_id=custom_id_str[:100])
         self.target = target
         self.kick_type = kick_type
         self.required_votes = required_votes
