@@ -141,7 +141,7 @@ class BotCommandControlSelect(discord.ui.Select):
                     "**🔹 doro เวลา** : เช็กเวลาปัจจุบัน\n"
                     "**🔹 doro โหวตเตะ** : เรียกหน้าต่าง UI แปะป้ายคนไม่น่ารัก\n"
                     "**🔹 doroส่งข้อความ <ช่อง_id> <ข้อความ>** *(คุณแอดมิน)*\n"
-                    "**🔹 doro ล้างข้อความ <จำนวน>** *(คุณผู้จัดการข้อความ)*\n"
+                    "**🔹 doro ลบข้อความ <จำนวน>** *(คุณผู้จัดการข้อความ)*\n"
                     "**🔹 doro รีเซ็ตchannel** : ชุบชีวิตห้องแชทใหม่\n"
                     "**🔹 doro คำสั่งเพลง** : ดูชุดคำสั่งเสียงดนตรี !play !skip !stop ทั้งหมดเจ้าค่ะ"
                 ),
@@ -546,9 +546,9 @@ async def on_message(message: discord.Message):
                 if ch: await ch.send(f"@everyone {content[1]}")
             return
 
-        if lower_msg.startswith("doroล้างข้อความ") or lower_msg.startswith("doro ล้างข้อความ"):
+        if lower_msg.startswith("doroลบข้อความ") or lower_msg.startswith("doro ลบข้อความ"):
             if not message.author.guild_permissions.manage_messages: return
-            count_str = msg[len("doroล้างข้อความ" if lower_msg.startswith("doroล้างข้อความ") else "doro ล้างข้อความ"):].strip()
+            count_str = msg[len("doroล้างข้อความ" if lower_msg.startswith("doroลบข้อความ") else "doro ลบข้อความ"):].strip()
             try:
                 deleted = await message.channel.purge(limit=int(count_str) + 1)
                 await message.channel.send(f"🧹 น้อน Doro กวาดบ้านและลบข้อความให้แล้วจำนวน {len(deleted)-1} ข้อความนะค๊าา ขยันสุด ๆ เยย!", delete_after=3)
