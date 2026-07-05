@@ -210,7 +210,9 @@ class RobloxServerSelect(discord.ui.Select):
             options.append(discord.SelectOption(label="ไม่มีเกมในคลังแสง", value="none", description="รอกรรมการมาเพิ่มเกมค๊าา"))
         else:
             for key, data in current_data.items():
-                options.append(discord.SelectOption(label=data["name"][:100], value=key, description=f"รหัสอ้างอิง: {key}"))
+                # Discord จำกัดความยาว Label ใน SelectOption ไม่เกิน 100 ตัวอักษร (เซฟๆ ตัดที่ 90)
+                short_name = data["name"][:90]
+                options.append(discord.SelectOption(label=short_name, value=key, description=f"รหัสอ้างอิง: {key}"[:100]))
         super().__init__(placeholder="🎮 เลือกเกมที่ต้องการเข้าเล่นได้เลยค๊าา...", min_values=1, max_values=1, options=options)
 
     async def callback(self, interaction: discord.Interaction):
@@ -228,7 +230,9 @@ class RobloxServerSelect(discord.ui.Select):
                 color=0x00FFCC
             )
             view = discord.ui.View()
-            view.add_item(discord.ui.Button(label="👉 เข้าเซิร์ฟเวอร์วีที่นี่", url=game_data['url'], style=discord.ButtonStyle.link))
+            # ตัด Label ปุ่มให้ไม่เกิน 45 ตัวอักษรตามกฎ Discord
+            button_label = f"👉 เข้า {game_data['name']}"[:45]
+            view.add_item(discord.ui.Button(label=button_label, url=game_data['url'], style=discord.ButtonStyle.link))
             await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
         else:
             await interaction.response.send_message("❌ งื้ออ ลิงก์นี้อาจจะโดนลบหรือแก้ไขไปแล้วค๊าา", ephemeral=True)
@@ -345,7 +349,9 @@ class SubmitQuestionButton(discord.ui.Button):
 
 class VoteSelect(discord.ui.Select):
     def __init__(self, choices, result_channel_id, all_choices_list):
-        opts = [discord.SelectOption(label=opt[:100]) for opt in choices]
+        # จุดตาย! Discord SelectOption Label ห้ามยาวเกิน และถ้าเป็นปุ่มห้ามเกิน 45 
+        # เพื่อความปลอดภัยในระบบ Component เราจะตัดช้อยส์ที่แสดงบนเมนูให้เหลือไม่เกิน 90 ตัวอักษร
+        opts = [discord.SelectOption(label=opt[:90]) for opt in choices]
         super().__init__(placeholder="🗳️ กดตรงนี้เพื่อโหวตเลือกคำตอบที่คุณชอบเลยน้าา...", options=opts, min_values=1, max_values=1)
         self.result_channel_id = result_channel_id
         self.all_choices_list = all_choices_list  
