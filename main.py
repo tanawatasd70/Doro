@@ -95,7 +95,7 @@ class BotCommandControlSelect(discord.ui.Select):
         value = self.values[0]
         current_guild = interaction.guild
         
-        # 🔥 ลบแผงควบคุมหลักอันบนสุดทิ้งทันที! (แก้ปัญหารูปแผง UI เก่าค้างรกแชท)
+        # 🔥 ลบแผงควบคุมหลักอันบนสุดทิ้งทันที! (แก้ปัญหารูปรกแชท)
         try:
             await interaction.message.delete()
         except Exception:
@@ -518,7 +518,7 @@ class VoteProgressView(discord.ui.View):
 
 
 # ==========================================
-# ⚙️ SYSTEM CORE & CHAT INTERCEPTOR
+# ⚙️ SYSTEM CORE & EVENTS (ส่วนท้ายที่สมบูรณ์)
 # ==========================================
 @bot.event
 async def on_ready():
@@ -537,27 +537,20 @@ async def on_message(message: discord.Message):
             await message.channel.send(custom_responses[lower_msg])
             return
 
-        # 📌 [ล็อกเป้าหมายใหม่] เมนูหลัก: ลบข้อความที่พิมพ์ แล้วปล่อยเมนูทำลายตัวเองใน 60 วินาที
+        # 📌 เปิดแผงควบคุมหลัก (พร้อมลบคำสั่งตัวหนังสือเพื่อความคลีน)
         is_menu_cmd = False
         for keyword in ["เมนู", "เมณู", "เเมนู", "menu", "munu", "menuu"]:
             if f"doro {keyword}" in lower_msg or f"doro{keyword}" in lower_msg:
                 is_menu_cmd = True
                 break
         if is_menu_cmd:
-            try: 
-                await message.delete()  # ลบคำสั่งพิมพ์ทันที คนอื่นจะไม่เห็นร่องรอยค๊าา
-            except Exception: 
-                pass
-                
-            embed = discord.Embed(
-                title="⚙️ Doro แผงควบคุมระบบอัจฉริยะสุดน่ารัก (UI Mode)", 
-                description="ยินดีต้อนรับสู่ดินแดนแห่งความน่ารักค๊าา! เลือกเมนูด้านล่างนี้เพื่อเปิดใช้งานฟังก์ชันได้ตามใจชอบเลยนะค๊าา ✨\n*(เพื่อความเป็นระเบียบและปิดลับ แผงนี้จะถูกทำลายตัวเองใน 60 วินาทีนะค๊าา)*", 
-                color=0x3498DB
-            )
-            await message.channel.send(embed=embed, view=BotControlMenuView(), delete_after=60)
+            try: await message.delete() 
+            except Exception: pass
+            embed = discord.Embed(title="⚙️ Doro แผงควบคุมระบบอัจฉริยะสุดน่ารัก (UI Mode)", description="ยินดีต้อนรับสู่ดินแดนแห่งความน่ารักค๊าา! เลือกเมนูด้านล่างนี้เพื่อเปิดใช้งานฟังก์ชันได้ตามใจชอบเลยนะค๊าา ✨", color=0x3498DB)
+            await message.channel.send(embed=embed, view=BotControlMenuView())
             return
 
-        # 📌 เรียกแผงโหวตเตะโดยตรง (ระบบลบข้อความพิมพ์เพื่อความเนียน)
+        # 📌 เรียกแผงโหวตเตะโดยตรง
         is_kick_cmd = False
         for keyword in ["โหวตเตะ", "โหวดเตะ", "โหวตเเตะ", "votekick", "vote", "kick"]:
             if f"doro {keyword}" in lower_msg or f"doro{keyword}" in lower_msg:
