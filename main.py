@@ -146,7 +146,7 @@ class BotCommandControlSelect(discord.ui.Select):
                     "**🔹 doro เวลา**\n"
                     "**🔹 doro โหวตเตะ** : เรียกหน้าต่าง UI เพื่อโหวตเตะสมาชิก\n"
                     "**🔹 doroส่งข้อความ <ช่อง_id> <ข้อความ>** *(แอดมิน)*\n"
-                    "**🔹 doro ล้างข้อความ <จำนวน>** *(ผู้จัดการข้อความ)*\n"
+                    "**🔹 doro ลบข้อความ <จำนวน>** *(ผู้จัดการข้อความ)*\n"
                     "**🔹 doro รีเซ็ตchannel**\n"
                     "**🔹 doro คำสั่งเพลง** : ดูชุดคำสั่ง !play !skip !stop ทั้งหมด"
                 ),
@@ -320,7 +320,7 @@ class AskQuestionView(discord.ui.View):
         
         sent_msg = await q_channel.send(embed=embed, view=vote_view)
         vote_records[sent_msg.id] = {}
-        await interaction.response.send_message(f"✅ ปล่อยโพลเรียบร้อยแล้วที่ห้อง {q_channel.mention}", ephemeral=True)
+        await interaction.response.send_message(f"✅ ปล่อยโพลเรียบร้อยแล้วค่ะ ที่ห้อง {q_channel.mention}", ephemeral=True)
         self.question_text = None
 
 
@@ -335,14 +335,14 @@ class MemberSelect(discord.ui.UserSelect):
         
         # ตรวจสอบเบื้องต้น
         if target_member.id == interaction.user.id:
-            return await interaction.response.send_message("จะโหวตเตะตัวเองไม่ได้นะ! 😂", ephemeral=True)
+            return await interaction.response.send_message("จะโหวตเตะตัวเองไม่ได้นะคะ! 😂", ephemeral=True)
         if target_member.bot:
-            return await interaction.response.send_message("บอทเป็นอมตะ โหวตเตะไม่ได้หรอกนะ 🤖", ephemeral=True)
+            return await interaction.response.send_message("บอทเป็นอมตะ โหวตเตะไม่ได้หรอกนะคะ 🤖", ephemeral=True)
 
         # ดึง Member object เต็มๆ เพื่อเช็คสถานะออนไลน์
         member_obj = interaction.guild.get_member(target_member.id)
         if not member_obj:
-            return await interaction.response.send_message("❌ ไม่พบสมาชิกคนนี้ในเซิร์ฟเวอร์", ephemeral=True)
+            return await interaction.response.send_message("❌ ไม่พบสมาชิกคนนี้ในเซิร์ฟเวอร์เลยนะคะ", ephemeral=True)
 
         online_members = [m for m in self.guild.members if m.status != discord.Status.offline and not m.bot]
         required_votes = max(2, len(online_members) // 2 + 1)
@@ -350,8 +350,8 @@ class MemberSelect(discord.ui.UserSelect):
         view = VoteKickTypeView(member_obj, required_votes)
         
         embed = discord.Embed(
-            title="🛠️ ตั้งค่าระบบประชามติโหวตเตะ",
-            description=f"เป้าหมาย: {member_obj.mention}\nโปรดกดปุ่มด้านล่างเพื่อเลือกรูปแบบมาตรการลงทัณฑ์",
+            title="🛠️ ตั้งค่าระบบประชามติโหวตเตะสมาชิกค่ะ",
+            description=f"เป้าหมาย: {member_obj.mention}\nโปรดกดปุ่มด้านล่างเพื่อเลือกรูปแบบมาตรการลงทัณฑ์ค่ะ",
             color=0xF1C40F
         )
         await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
@@ -454,8 +454,8 @@ async def on_message(message: discord.Message):
         # 🎛️ เรียกหน้าเมนูหน้าต่าง UI ควบคุมรวมคำสั่งทั้งหมด
         if lower_msg == "doro เมนู":
             embed = discord.Embed(
-                title="⚙️ Doro แผงควบคุมระบบอัจฉริยะ (UI Mode)",
-                description="ยินดีต้อนรับสู่โหมด UI! คุณสามารถกดเลือกเมนูด้านล่างนี้เพื่อเปิดใช้งานฟังก์ชันรับยศ, ส่งโพลคำถาม หรือเปิดระบบโหวตเตะสมาชิกได้อย่างรวดเร็วครับ",
+                title="⚙️ Doro แผงควบคุมระบบอัจฉริยะค่ะ ",
+                description="ยินดีต้อนรับสู่หน้า ระบบ คุณสามารถกดเลือกเมนูด้านล่างนี้เพื่อเปิดใช้งานฟังก์ชันรับยศ, ส่งโพลคำถาม หรือเปิดระบบโหวตเตะสมาชิกได้อย่างรวดเร็วค่ะ",
                 color=0x3498DB
             )
             view = BotControlMenuView(message.guild)
@@ -465,8 +465,8 @@ async def on_message(message: discord.Message):
         # คำสั่งโหวตเตะแบบใหม่ผ่านระบบ UI Dropdown
         if lower_msg == "doro โหวตเตะ":
             embed = discord.Embed(
-                title="🚫 เริ่มวาระโหวตเตะสมาชิก (UI Mode)",
-                description="โปรดเลือกรายชื่อสมาชิกที่คุณต้องการเริ่มโหวตลงมติเตะจากเมนูด้านล่างนี้ครับ",
+                title="🚫 ขอเริ่มวาระโหวตเตะสมาชิกนะคะ",
+                description="โปรดเลือกรายชื่อสมาชิกที่คุณต้องการเริ่มโหวตลงมติเตะจากเมนูด้านล่างนี้ได้เลยค่ะ",
                 color=discord.Color.red()
             )
             view = MemberSelectView(message.guild)
@@ -482,9 +482,27 @@ async def on_message(message: discord.Message):
         if lower_msg == "doro สมาชิกทั้งหมด":
             guild = message.guild
             if guild is None: return
-            lines = [f"{m.display_name} - {str(m.status)}" for m in guild.members]
-            for i in range(0, len(lines), 20):
-                await message.channel.send(f"👥 สมาชิก ({guild.member_count} คน):\n" + "\n".join(lines[i:i+20]))
+            
+            # นับจำนวนแยกตามสถานะ
+            online = sum(1 for m in guild.members if m.status == discord.Status.online)
+            idle = sum(1 for m in guild.members if m.status == discord.Status.idle)
+            dnd = sum(1 for m in guild.members if m.status == discord.Status.dnd)
+            offline = sum(1 for m in guild.members if m.status == discord.Status.offline)
+            bots = sum(1 for m in guild.members if m.bot)
+            
+            embed = discord.Embed(
+                title=f"📊 สรุปข้อมูลสมาชิกในเซิร์ฟเวอร์ [{guild.name}]",
+                color=0x3498DB
+            )
+            embed.add_field(name="👥 สมาชิกทั้งหมด", value=f"**{guild.member_count}** คน", inline=False)
+            embed.add_field(name="🟢 ออนไลน์", value=f"{online} คน", inline=True)
+            embed.add_field(name="🌙 สตรีม/ว่าง", value=f"{idle} คน", inline=True)
+            embed.add_field(name="🔴 ห้ามรบกวน", value=f"{dnd} คน", inline=True)
+            embed.add_field(name="⚪ ออฟไลน์", value=f"{offline} คน", inline=True)
+            embed.add_field(name="🤖 บอทในเซิร์ฟ", value=f"{bots} ตัว", inline=True)
+            embed.set_thumbnail(url=guild.icon.url if guild.icon else None)
+            
+            await message.channel.send(embed=embed)
             return
 
         if lower_msg.startswith("doro ค้นหา"):
@@ -492,7 +510,7 @@ async def on_message(message: discord.Message):
             if not search_term: return
             results = VideosSearch(search_term, limit=1).result()
             if not results.get("result"): return
-            await message.channel.send(f"🎵 คลิป: **{results['result'][0]['title']}**\n🔗 {results['result'][0]['link']}")
+            await message.channel.send(f"🎬 คลิป: **{results['result'][0]['title']}**\n🔗 {results['result'][0]['link']}")
             return
 
         if lower_msg.startswith("doroส่งข้อความ") or lower_msg.startswith("doro ส่งข้อความ"):
@@ -503,7 +521,7 @@ async def on_message(message: discord.Message):
                 if ch: await ch.send(f"@everyone {content[1]}")
             return
 
-        if lower_msg.startswith("doroล้างข้อความ") or lower_msg.startswith("doro ล้างข้อความ"):
+        if lower_msg.startswith("doroลบข้อความ") or lower_msg.startswith("doro ลบข้อความ"):
             if not message.author.guild_permissions.manage_messages: return
             count_str = msg[len("doroล้างข้อความ" if lower_msg.startswith("doroล้างข้อความ") else "doro ล้างข้อความ"):].strip()
             try:
