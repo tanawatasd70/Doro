@@ -265,7 +265,7 @@ class VoteSelect(discord.ui.Select):
         result_channel = guild.get_channel(self.result_channel_id) if guild else None
         if result_channel:
             await result_channel.send(embed=discord.Embed(title="📊 ผลโหวตล่าสุดอัปเดตแล้ว", description=summary_text, color=0x87CEEB))
-        await interaction2.response.send_message(f"✅ บันทึกคะแนนโหวตโพลคำตอบ [{self.values[0]}] ของคุณแล้ว", ephemeral=True)
+        await interaction2.response.send_message(f"✅ บันทึกคะแนนโหวตโพลคำตอบ [{self.values[0]}] ของคุณแล้ว", ephemeral=True, delete_after=3)
 
 class AskQuestionView(discord.ui.View):
     def __init__(self, guild):
