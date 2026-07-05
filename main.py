@@ -1,4 +1,5 @@
 import os
+import json
 import random
 import asyncio
 import pytz
@@ -41,55 +42,27 @@ poll_result_messages = {}
 music_queues = {}  
 now_playing = {}   
 
-ytdl_format_options = {
-    "format": "bestaudio/best",
-    "noplaylist": True,
-    "quiet": True,
-    "extract_flat": "in_playlist",
-    "no_warnings": True,
-    "default_search": "ytsearch",
-}
-ytdl = yt_dlp.YoutubeDL(ytdl_format_options)
+# ==========================================
+# 🎮 ROBLOX PRIVATE SERVER DATABASE SYSTEM
+# ==========================================
+JSON_FILE = "roblox_servers.json"
 
-FFMPEG_OPTIONS = {
-    "before_options": "-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5",
-    "options": "-vn"
-}
-
-async def ytdl_extract(query: str):
-    loop = asyncio.get_event_loop()
+def load_roblox_data():
     try:
-        info = await loop.run_in_executor(None, lambda: ytdl.extract_info(query, download=False))
-        if "entries" in info:
-            info = info["entries"][0]
-        return {"title": info.get("title"), "url": info.get("url"), "webpage_url": info.get("webpage_url")}
-    except Exception as e:
-        logger.exception("yt_dlp error")
-        return None
+        with open(JSON_FILE, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except FileNotFoundError:
+        default_data = {
+            "blox_fruits": {"name": "🏴‍☠️ Blox Fruits", "url": "https://www.roblox.com/"},
+            "king_legacy": {"name": "👑 King Legacy", "url": "https://www.roblox.com/"}
+        }
+        save_roblox_data(default_data)
+        return default_data
 
-def ensure_queue(guild_id: int):
-    if guild_id not in music_queues:
-        music_queues[guild_id] = []
+def save_roblox_data(data):
+    with open(JSON_FILE, "w", encoding="utf-8") as f:
+        json.dump(data, f, indent=4, ensure_ascii=False)
 
-async def play_next_in_queue(guild: discord.Guild):
-    guild_id = guild.id
-    ensure_queue(guild_id)
-    queue = music_queues[guild_id]
-    voice_client = discord.utils.get(bot.voice_clients, guild=guild)
-    if not voice_client: return
-    if voice_client.is_playing() or voice_client.is_paused(): return
-    if not queue:
-        now_playing.pop(guild_id, None)
-        return
-    track = queue.pop(0)
-    now_playing[guild_id] = track
-    source = discord.FFmpegPCMAudio(track["url"], **FFMPEG_OPTIONS)
-    def after_play(error):
-        if error: logger.error(f"Error while playing: {error}")
-        fut = asyncio.run_coroutine_threadsafe(play_next_in_queue(guild), bot.loop)
-        try: fut.result()
-        except Exception: logger.exception("Error scheduling next track")
-    voice_client.play(source, after=after_play)
 
 # ==========================================
 # 🎛️ NEW UI COMMAND MODE (เมนูหลักควบคุมคำสั่ง)
@@ -99,6 +72,7 @@ class BotCommandControlSelect(discord.ui.Select):
         options = [
             discord.SelectOption(label="🛡️ เปิดระบบจัดการ/ขอยศ", description="เรียกเมนู Dropdown เลือกรับยศ และปุ่มขอยศสุดน่ารัก", value="setup_roles"),
             discord.SelectOption(label="📊 เปิดระบบสร้างคำถามโพล", description="สร้างโพลน่ารัก ๆ เพื่อโหวตเลือกคำตอบกันเถอะ", value="setup_poll"),
+            discord.SelectOption(label="🎮 รวมลิงก์ Private Server Roblox", description="คลังแสงลิงก์เซิร์ฟเวอร์วีเกมต่าง ๆ ของชาว Robloxค๊าา", value="roblox_servers"),
             discord.SelectOption(label="🚫 เริ่มวาระโหวตเตะสมาชิก", description="เลือกคนที่ทำตัวไม่น่ารักเพื่อเริ่มโหวตเตะกันค่ะ!", value="setup_kick"),
             discord.SelectOption(label="📖 ดูคู่มือคำสั่งบอททั้งหมด", description="มาดูคู่มือการสั่งงานน้อน Doro ทั้งหมดกันงับ", value="show_commands")
         ]
@@ -121,6 +95,15 @@ class BotCommandControlSelect(discord.ui.Select):
             view = AskQuestionView(interaction.guild)
             await interaction.response.send_message("📋 **ตั้งค่าระบบโพลคำถามน้าา:** โปรดเลือกห้องแชทและกรอกข้อมูลคำถามให้ครบถ้วนก่อนน้อน Doro จะปล่อยโพลนะค๊าา", view=view, ephemeral=True)
             
+        elif value == "roblox_servers":
+            embed = discord.Embed(
+                title="🎮 คลังแสง Private Server ของแก๊งเรา! 🚀",
+                description="อยากไปฟาร์ม ไปเวล หรือไปตึงเกมไหน เลือกชื่อเกมจากเมนูด้านล่างนี้ได้เลยค๊าา\n(สำหรับแอดมินสามารถกดปุ่มเพื่อเพิ่มหรือลบเกมได้เลยนะค๊าา) ✨",
+                color=0x00E5FF
+            )
+            view = RobloxServerView()
+            await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
+
         elif value == "setup_kick":
             embed = discord.Embed(
                 title="🚫 ระบบโหวตเตะสมาชิก (โหมด Doro เอาจริง!)",
@@ -135,7 +118,7 @@ class BotCommandControlSelect(discord.ui.Select):
                 title="📘 สมุดคู่มือของน้อน Doro 🤖✨",
                 description=(
                     "**🔹 bot ชื่ออะไร** / **doro ช่วยอะไรได้บ้าง** / **doro สวัสดี**\n"
-                    "**🔹 doro เมนู** : เปิดแผงควบคุม UI น่ารัก ๆ สำหรับขอยศ สร้างโพล หรือโหวตเตะ\n"
+                    "**🔹 doro เมนู** : เปิดแผงควบคุม UI น่ารัก ๆ สำหรับขอยศ สร้างโพล หรือลิงก์ Roblox\n"
                     "**🔹 doro ค้นหา <ชื่อคลิป>** : ค้นหาคลิปวิดีโอให้คุณ\n"
                     "**🔹 doro สมาชิกทั้งหมด** : ดูสถิติคนในเซิร์ฟเวอร์แบบตะมุตะมิ\n"
                     "**🔹 doro เวลา** : เช็กเวลาปัจจุบัน\n"
@@ -155,6 +138,129 @@ class BotControlMenuView(discord.ui.View):
         self.add_item(BotCommandControlSelect(guild))
 
 
+# ==========================================
+# 🎮 ROBLOX UI COMPONENTS
+# ==========================================
+class AddRobloxServerModal(discord.ui.Modal, title="🎮 เพิ่ม/แก้ไข ลิงก์เซิร์ฟเวอร์วี"):
+    game_id = discord.ui.TextInput(
+        label="รหัสเกม (ภาษาอังกฤษตัวพิมพ์เล็ก ห้ามมีช่องว่าง)", 
+        placeholder="เช่น blox_fruits, bedwars, anime_defenders",
+        style=discord.TextStyle.short
+    )
+    game_name = discord.ui.TextInput(
+        label="ชื่อเกมที่จะให้โชว์บนเมนู (ใส่ อีโมจิ ได้น้าา)", 
+        placeholder="เช่น 🏴‍☠️ Blox Fruits (เซิร์ฟหลัก), ⚔️ โหมดตึง",
+        style=discord.TextStyle.short
+    )
+    game_url = discord.ui.TextInput(
+        label="ลิงก์ Private Server (Roblox Link)", 
+        placeholder="https://www.roblox.com/share?code=...",
+        style=discord.TextStyle.short
+    )
+
+    def __init__(self, parent_view):
+        super().__init__()
+        self.parent_view = parent_view
+
+    async def on_submit(self, interaction: discord.Interaction):
+        if not interaction.user.guild_permissions.manage_guild:
+            return await interaction.response.send_message("❌ งื้ออ คุณไม่มีสิทธิ์จัดการเซิร์ฟเวอร์ (Manage Server) ไม่สามารถเพิ่มลิงก์ได้ค๊าา", ephemeral=True)
+
+        g_id = self.game_id.value.strip().lower().replace(" ", "_")
+        g_name = self.game_name.value.strip()
+        g_url = self.game_url.value.strip()
+
+        if not g_url.startswith("http"):
+            return await interaction.response.send_message("❌ รูปแบบลิงก์ไม่ถูกต้องค๊าา ต้องขึ้นต้นด้วย http หรือ https น้าา", ephemeral=True)
+
+        current_data = load_roblox_data()
+        current_data[g_id] = {"name": g_name, "url": g_url}
+        save_roblox_data(current_data)
+
+        await interaction.response.send_message(f"✅ เย้! บันทึกเกม **{g_name}** เรียบร้อยแล้วค๊าา! (รบกวนเปิดเมนูใหม่อีกรอบเพื่ออัปเดตรายชื่อนะค๊าา)", ephemeral=True)
+
+class AddServerButton(discord.ui.Button):
+    def __init__(self, parent_view):
+        super().__init__(label="➕ เพิ่ม/แก้ไขลิงก์เกม", style=discord.ButtonStyle.primary)
+        self.parent_view = parent_view
+
+    async def callback(self, interaction: discord.Interaction):
+        if not interaction.user.guild_permissions.manage_guild:
+            return await interaction.response.send_message("❌ ปุ่มนี้เฉพาะคุณแอดมินหรือคนที่มีสิทธิ์จัดการเซิร์ฟเวอร์เท่านั้นน้าาองึมม", ephemeral=True)
+        await interaction.response.send_modal(AddRobloxServerModal(self.parent_view))
+
+class DeleteRobloxServerModal(discord.ui.Modal, title="🗑️ ลบลิงก์เซิร์ฟเวอร์วี"):
+    game_id = discord.ui.TextInput(
+        label="พิมพ์รหัสเกมที่ต้องการลบ (ภาษาอังกฤษ)", 
+        placeholder="เช่น blox_fruits",
+        style=discord.TextStyle.short
+    )
+
+    async def on_submit(self, interaction: discord.Interaction):
+        if not interaction.user.guild_permissions.manage_guild:
+            return await interaction.response.send_message("❌ สิทธิ์ไม่พอค๊าา", ephemeral=True)
+
+        g_id = self.game_id.value.strip().lower()
+        current_data = load_roblox_data()
+
+        if g_id in current_data:
+            name = current_data[g_id]['name']
+            del current_data[g_id]
+            save_roblox_data(current_data)
+            await interaction.response.send_message(f"🗑️ ลบลิงก์เกม **{name}** ออกจากคลังแสงให้เรียบร้อยแล้วค๊าา!", ephemeral=True)
+        else:
+            await interaction.response.send_message(f"❌ ไม่พบรหัสเกม `{g_id}` ในระบบค๊าา ลองเช็กตัวสะกดอีกทีน้าา", ephemeral=True)
+
+class DeleteServerButton(discord.ui.Button):
+    def __init__(self):
+        super().__init__(label="🗑️ ลบลิงก์เกม", style=discord.ButtonStyle.danger)
+
+    async def callback(self, interaction: discord.Interaction):
+        if not interaction.user.guild_permissions.manage_guild:
+            return await interaction.response.send_message("❌ สิทธิ์ไม่พอน้าาคุณคนดี ปุ่มนี้เฉพาะแอดมินค๊าา", ephemeral=True)
+        await interaction.response.send_modal(DeleteRobloxServerModal())
+
+class RobloxServerSelect(discord.ui.Select):
+    def __init__(self):
+        current_data = load_roblox_data()
+        options = []
+        
+        if not current_data:
+            options.append(discord.SelectOption(label="ไม่มีเกมในคลังแสง", value="none", description="รอกรรมการมาเพิ่มเกมค๊าา"))
+        else:
+            for key, data in current_data.items():
+                options.append(discord.SelectOption(label=data["name"], value=key, description=f"รหัสอ้างอิง: {key}"))
+            
+        super().__init__(placeholder="🎮 เลือกเกมที่ต้องการเข้าเล่นได้เลยค๊าา...", min_values=1, max_values=1, options=options)
+
+    async def callback(self, interaction: discord.Interaction):
+        if self.values[0] == "none":
+            return await interaction.response.send_message("❌ ยังไม่มีเกมในระบบเลยงับบ รอแอดมินมาแอดให้น้าา", ephemeral=True)
+
+        game_key = self.values[0]
+        current_data = load_roblox_data()
+        game_data = current_data.get(game_key)
+        
+        if game_data:
+            embed = discord.Embed(
+                title=f"🚀 ลิงก์เข้า Private Server เกม {game_data['name']}",
+                description=f"กดที่ปุ่ม **'👉 เข้าเซิร์ฟเวอร์วีที่นี่'** ด้านล่างเพื่อเข้าเล่นได้ทันทีค๊าา!\n\n🔗 ลิงก์สำรอง: {game_data['url']}",
+                color=0x00FFCC
+            )
+            view = discord.ui.View()
+            view.add_item(discord.ui.Button(label="👉 เข้าเซิร์ฟเวอร์วีที่นี่", url=game_data['url'], style=discord.ButtonStyle.link))
+            await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
+        else:
+            await interaction.response.send_message("❌ งื้ออ ลิงก์นี้อาจจะโดนลบหรือแก้ไขไปแล้วค๊าา", ephemeral=True)
+
+class RobloxServerView(discord.ui.View):
+    def __init__(self):
+        super().__init__(timeout=180)
+        self.add_item(RobloxServerSelect())
+        self.add_item(AddServerButton(self))
+        self.add_item(DeleteServerButton())
+
+
 # === Dynamic Role System ===
 class RoleSelect(discord.ui.Select):
     def __init__(self, guild):
@@ -165,7 +271,7 @@ class RoleSelect(discord.ui.Select):
     async def callback(self, interaction: discord.Interaction):
         role = interaction.guild.get_role(int(self.values[0]))
         if role is None:
-            return await interaction.response.send_message("❌ งื้ออ ไม่พบยศนี้ในเซิร์ฟเวอร์เลยค่ะ", ephemeral=True)
+            return await interaction.response.send_message("❌ งื้ออ ไม่พบยศนี้ in เซิร์ฟเวอร์เลยค่ะ", ephemeral=True)
         try:
             await interaction.user.add_roles(role)
             await interaction.response.send_message(f"✅ เย้! ยินดีด้วยน้าา คุณได้รับยศ **{role.name}** เรียบร้อยแล้วค่ะ! 🎉", ephemeral=True)
@@ -275,7 +381,7 @@ class VoteSelect(discord.ui.Select):
         for ans in summary:
             voters = summary[ans]
             summary_text += f"**{ans}**: {len(voters)} คะแนนเสียงน้าา\n"
-            if voters: summary_text += "   ↳ " + ", ".join(voters) + "\n"
+            if voters: summary_text += "    ↳ " + ", ".join(voters) + "\n"
 
         result_channel = guild.get_channel(self.result_channel_id) if guild else None
         
@@ -483,7 +589,7 @@ async def on_message(message: discord.Message):
         if lower_msg == "doro เมนู":
             embed = discord.Embed(
                 title="⚙️ Doro แผงควบคุมระบบอัจฉริยะสุดน่ารัก (UI Mode)",
-                description="ยินดีต้อนรับสู่ดินแดนแห่งความน่ารักค๊าา! เลือกเมนูด้านล่างนี้เพื่อเปิดใช้งานฟังก์ชันรับยศ ส่งโพล หรือโหวตเตะได้ตามใจชอบเลยนะค๊าา ✨",
+                description="ยินดีต้อนรับสู่ดินแดนแห่งความน่ารักค๊าา! เลือกเมนูด้านล่างนี้เพื่อเปิดใช้งานฟังก์ชันรับยศ ส่งโพล หรือรวบรวมลิงก์ Roblox ได้ตามใจชอบเลยนะค๊าา ✨",
                 color=0x3498DB
             )
             view = BotControlMenuView(message.guild)
@@ -579,6 +685,56 @@ async def on_message(message: discord.Message):
 
 
 # --- Music Commands ---
+ytdl_format_options = {
+    "format": "bestaudio/best",
+    "noplaylist": True,
+    "quiet": True,
+    "extract_flat": "in_playlist",
+    "no_warnings": True,
+    "default_search": "ytsearch",
+}
+ytdl = yt_dlp.YoutubeDL(ytdl_format_options)
+
+FFMPEG_OPTIONS = {
+    "before_options": "-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5",
+    "options": "-vn"
+}
+
+async def ytdl_extract(query: str):
+    loop = asyncio.get_event_loop()
+    try:
+        info = await loop.run_in_executor(None, lambda: ytdl.extract_info(query, download=False))
+        if "entries" in info:
+            info = info["entries"][0]
+        return {"title": info.get("title"), "url": info.get("url"), "webpage_url": info.get("webpage_url")}
+    except Exception as e:
+        logger.exception("yt_dlp error")
+        return None
+
+def ensure_queue(guild_id: int):
+    if guild_id not in music_queues:
+        music_queues[guild_id] = []
+
+async def play_next_in_queue(guild: discord.Guild):
+    guild_id = guild.id
+    ensure_queue(guild_id)
+    queue = music_queues[guild_id]
+    voice_client = discord.utils.get(bot.voice_clients, guild=guild)
+    if not voice_client: return
+    if voice_client.is_playing() or voice_client.is_paused(): return
+    if not queue:
+        now_playing.pop(guild_id, None)
+        return
+    track = queue.pop(0)
+    now_playing[guild_id] = track
+    source = discord.FFmpegPCMAudio(track["url"], **FFMPEG_OPTIONS)
+    def after_play(error):
+        if error: logger.error(f"Error while playing: {error}")
+        fut = asyncio.run_coroutine_threadsafe(play_next_in_queue(guild), bot.loop)
+        try: fut.result()
+        except Exception: logger.exception("Error scheduling next track")
+    voice_client.play(source, after=after_play)
+
 @bot.command(name="join")
 async def join_cmd(ctx):
     if ctx.author.voice is None: return
