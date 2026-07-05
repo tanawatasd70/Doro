@@ -145,7 +145,7 @@ class BotControlMenuView(discord.ui.View):
 
 
 # ==========================================
-# 🎮 ROBLOX UI COMPONENTS (ยุบรวมอันซ้ำแล้ว)
+# 🎮 ROBLOX UI COMPONENTS (แก้ไขจุดบัก Label ยาวเกิน)
 # ==========================================
 class AddRobloxServerModal(discord.ui.Modal, title="🎮 เพิ่ม/แก้ไข ลิงก์เซิร์ฟเวอร์วี"):
     game_id = discord.ui.TextInput(
@@ -210,8 +210,7 @@ class RobloxServerSelect(discord.ui.Select):
             options.append(discord.SelectOption(label="ไม่มีเกมในคลังแสง", value="none", description="รอกรรมการมาเพิ่มเกมค๊าา"))
         else:
             for key, data in current_data.items():
-                # Discord จำกัดความยาว Label ใน SelectOption ไม่เกิน 100 ตัวอักษร (เซฟๆ ตัดที่ 90)
-                short_name = data["name"][:90]
+                short_name = data["name"][:90] if data["name"] else "Unknown Game"
                 options.append(discord.SelectOption(label=short_name, value=key, description=f"รหัสอ้างอิง: {key}"[:100]))
         super().__init__(placeholder="🎮 เลือกเกมที่ต้องการเข้าเล่นได้เลยค๊าา...", min_values=1, max_values=1, options=options)
 
@@ -230,8 +229,11 @@ class RobloxServerSelect(discord.ui.Select):
                 color=0x00FFCC
             )
             view = discord.ui.View()
-            # ตัด Label ปุ่มให้ไม่เกิน 45 ตัวอักษรตามกฎ Discord
-            button_label = f"👉 เข้า {game_data['name']}"[:45]
+            
+            # [แก้ไขจุดนี้] ป้องกัน Error 50035 โดยจำกัดความยาวปุ่มไม่เกิน 45 ตัวอักษร และห้ามเป็นค่าว่าง
+            raw_label = f"👉 เข้า {game_data['name']}"
+            button_label = raw_label[:40] if len(raw_label) > 0 else "👉 เข้าสู่เซิร์ฟเวอร์วี"
+            
             view.add_item(discord.ui.Button(label=button_label, url=game_data['url'], style=discord.ButtonStyle.link))
             await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
         else:
@@ -255,11 +257,11 @@ class RobloxServerView(discord.ui.View):
         await interaction.response.send_modal(DeleteRobloxServerModal())
 
 
-# === Dynamic Role System ===
+# --- Dynamic Role System ---
 class RoleSelect(discord.ui.Select):
     def __init__(self, guild):
         roles = [r for r in guild.roles if r.name != "@everyone" and not r.managed]
-        options = [discord.SelectOption(label=r.name, value=str(r.id)) for r in roles[:25]]
+        options = [discord.SelectOption(label=r.name[:90], value=str(r.id)) for r in roles[:25]]
         super().__init__(placeholder="🎨 เลือกรับยศสุดเลิศของคุณที่นี่เลยน้าา...", min_values=1, max_values=1, options=options)
 
     async def callback(self, interaction: discord.Interaction):
@@ -349,9 +351,7 @@ class SubmitQuestionButton(discord.ui.Button):
 
 class VoteSelect(discord.ui.Select):
     def __init__(self, choices, result_channel_id, all_choices_list):
-        # จุดตาย! Discord SelectOption Label ห้ามยาวเกิน และถ้าเป็นปุ่มห้ามเกิน 45 
-        # เพื่อความปลอดภัยในระบบ Component เราจะตัดช้อยส์ที่แสดงบนเมนูให้เหลือไม่เกิน 90 ตัวอักษร
-        opts = [discord.SelectOption(label=opt[:90]) for opt in choices]
+        opts = [discord.SelectOption(label=opt[:90] if opt else "ตัวเลือก") for opt in choices]
         super().__init__(placeholder="🗳️ กดตรงนี้เพื่อโหวตเลือกคำตอบที่คุณชอบเลยน้าา...", options=opts, min_values=1, max_values=1)
         self.result_channel_id = result_channel_id
         self.all_choices_list = all_choices_list  
@@ -376,7 +376,7 @@ class VoteSelect(discord.ui.Select):
         for ans in summary:
             voters = summary[ans]
             summary_text += f"**{ans}**: {len(voters)} คะแนนเสียง\n"
-            if voters: summary_text += "    ↳ " + ", ".join(voters) + "\n"
+            if voters: summary_text += "     ↳ " + ", ".join(voters) + "\n"
 
         result_channel = guild.get_channel(self.result_channel_id) if guild else None
         if result_channel:
@@ -408,7 +408,7 @@ class AskQuestionView(discord.ui.View):
         self.poll_choices = []
 
         channels = [c for c in guild.channels if isinstance(c, discord.TextChannel)]
-        channel_options = [discord.SelectOption(label=f"#{ch.name}", value=str(ch.id)) for ch in channels[:25]]
+        channel_options = [discord.SelectOption(label=f"#{ch.name}"[:90], value=str(ch.id)) for ch in channels[:25]]
         
         self.select_question_channel = discord.ui.Select(placeholder="📢 1. เลือกห้องที่จะให้น้อน Doro ไปปล่อยโพลค่ะ", options=channel_options)
         self.select_question_channel.callback = self.on_select_channel
@@ -578,7 +578,7 @@ async def on_message(message: discord.Message):
                 description="ยินดีต้อนรับสู่ดินแดนแห่งความน่ารักค๊าา! เลือกเมนูด้านล่างนี้เพื่อเปิดใช้งานฟังก์ชันได้ตามใจชอบเลยนะค๊าา ✨",
                 color=0x3498DB
             )
-            view = BotControlMenuView() # เอา message.guild ออกเพื่อให้ทำงานอย่างถูกต้อง
+            view = BotControlMenuView()
             await message.channel.send(embed=embed, view=view)
             return
 
@@ -592,7 +592,6 @@ async def on_message(message: discord.Message):
             await message.channel.send(embed=embed, view=view)
             return
 
-        # ปิดฟังก์ชันเช็คสถิติสมาชิกที่โดนตัดขาดช่วงท้ายโค้ดเก่าให้สมบูรณ์
         if lower_msg == "doro สมาชิกทั้งหมด":
             guild = message.guild
             if guild is None: return
@@ -613,6 +612,6 @@ async def on_message(message: discord.Message):
     except Exception as e:
         logger.error(f"เกิดข้อผิดพลาดในระบบข้อความ: {e}")
 
-# รัน Server และบอท (แก้ไขให้อยู่บรรทัดล่างสุด)
+# รัน Server และบอท
 server_on()
 bot.run(DISCORD_TOKEN)
