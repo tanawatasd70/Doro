@@ -141,7 +141,6 @@ class RemoveRolesButton(discord.ui.Button):
         super().__init__(label="ลบยศทั้งหมด", style=discord.ButtonStyle.danger, emoji="🗑️")
 
     async def callback(self, interaction: discord.Interaction):
-        # ดึงยศทั้งหมดของเซิร์ฟเวอร์ที่ไม่ใช่ยศระบบ เพื่อนำมาเช็คและลบออกจากตัวผู้ใช้
         roles_to_remove = [
             r for r in interaction.user.roles
             if r.name != "@everyone" and not r.managed
@@ -339,6 +338,87 @@ class AskQuestionView(discord.ui.View):
         await interaction.response.send_message(f"✅ ส่งคำถามไปที่ {question_channel.mention} เรียบร้อยแล้ว\nสรุปผลโหวตที่ช่อง {result_channel.mention}", ephemeral=True)
         self.question_text = None
 
+# --- Vote Kick UI System ---
+class KickTypeButton(discord.ui.Button):
+    def __init__(self, target: discord.Member, kick_type: str, required_votes: int):
+        label_str = "เตะออกจากห้องเสียง" if kick_type == "voice" else "เตะออกจากเซิร์ฟเวอร์"
+        style = discord.ButtonStyle.primary if kick_type == "voice" else discord.ButtonStyle.danger
+        super().__init__(label=label_str, style=style)
+        self.target = target
+        self.kick_type = kick_type
+        self.required_votes = required_votes
+
+    async def callback(self, interaction: discord.Interaction):
+        view = VoteProgressView(self.target, self.kick_type, self.required_votes)
+        
+        embed = discord.Embed(
+            title=f"🚨 เริ่มการโหวตเตะผู้ใช้",
+            description=f"เป้าหมาย: {self.target.mention}\nประเภท: **{self.label}**\nต้องการคะแนนเสียง: **{self.required_votes}** โหวต",
+            color=discord.Color.red()
+        )
+        embed.add_field(name="คะแนนปัจจุบัน", value=f"🟢 เห็นด้วย: 0/{self.required_votes}")
+        
+        if self.view:
+            for item in self.view.children:
+                item.disabled = True
+            await interaction.response.edit_message(view=self.view)
+            
+        await interaction.channel.send(embed=embed, view=view)
+
+class VoteKickTypeView(discord.ui.View):
+    def __init__(self, target: discord.Member, required_votes: int):
+        super().__init__(timeout=60)
+        self.add_item(KickTypeButton(target, "voice", required_votes))
+        self.add_item(KickTypeButton(target, "server", required_votes))
+
+class VoteProgressView(discord.ui.View):
+    def __init__(self, target: discord.Member, kick_type: str, required_votes: int):
+        super().__init__(timeout=120)
+        self.target = target
+        self.kick_type = kick_type
+        self.required_votes = required_votes
+        self.voters = set()
+
+    @discord.ui.button(label="🟢 เห็นด้วย (Vote)", style=discord.ButtonStyle.success, emoji="👍")
+    async def vote_callback(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if interaction.user.id in self.voters:
+            return await interaction.response.send_message("คุณเคยโหวตไปแล้ว!", ephemeral=True)
+        
+        if interaction.user.id == self.target.id:
+            return await interaction.response.send_message("คุณไม่สามารถโหวตเตะตัวเองได้นะ 🤣", ephemeral=True)
+
+        self.voters.add(interaction.user.id)
+        current_votes = len(self.voters)
+
+        embed = interaction.message.embeds[0]
+        embed.set_field_at(0, name="คะแนนปัจจุบัน", value=f"🟢 เห็นด้วย: {current_votes}/{self.required_votes}")
+
+        if current_votes >= self.required_votes:
+            for item in self.children:
+                item.disabled = True
+            await interaction.response.edit_message(embed=embed, view=self)
+
+            try:
+                if self.kick_type == "voice":
+                    if self.target.voice and self.target.voice.channel:
+                        await self.target.move_to(None, reason="ผลโหวตเตะออกจากห้องเสียง")
+                        await interaction.channel.send(f"🔨 ผลโหวตเป็นเอกฉันท์! เตะ {self.target.mention} ออกจากห้องเสียงเรียบร้อย")
+                    else:
+                        await interaction.channel.send(f"⚠️ ผลโหวตผ่าน แต่ {self.target.mention} ไม่ได้อยู่ในห้องเสียงแล้ว")
+                
+                elif self.kick_type == "server":
+                    await self.target.kick(reason="ผลโหวตเตะออกจากเซิร์ฟเวอร์")
+                    await interaction.channel.send(f"💥 มติเป็นเอกฉันท์! บอททำการเตะ {self.target.mention} ออกจากเซิร์ฟเวอร์เรียบร้อยแล้ว!")
+            
+            except discord.Forbidden:
+                await interaction.channel.send(f"❌ บอทไม่มีสิทธิ์ทำรายการกับผู้ใช้คนนี้ (โปรดเช็คลำดับยศของบอท)")
+            except Exception as e:
+                await interaction.channel.send(f"⚠️ เกิดข้อผิดพลาด: {e}")
+            
+            self.stop()
+        else:
+            await interaction.response.edit_message(embed=embed, view=self)
+
 # --- Events & Message Handling ---
 @bot.event
 async def on_ready():
@@ -372,6 +452,41 @@ async def on_message(message: discord.Message):
         if lower_msg.startswith("doro ถาม"):
             view = AskQuestionView(message.guild)
             await message.reply("📋 กดปุ่มด้านล่างเพื่อสร้างคำถาม", view=view)
+            return
+
+        if lower_msg.startswith("doro โหวตเตะ"):
+            if not message.author.voice or not message.author.voice.channel:
+                await message.channel.send("❌ คุณต้องอยู่ในห้องเสียงก่อนเพื่อใช้คำสั่งนี้ (ระบบจะอิงจำนวนคนในห้องเสียงเพื่อคำนวณเป้าคะแนน)")
+                return
+
+            voice_channel = message.author.voice.channel
+            members_in_voice = [m for m in voice_channel.members if not m.bot]
+
+            if len(members_in_voice) < 2:
+                await message.channel.send("❗ ในห้องเสียงมีคุณอยู่คนเดียว จะโหวตเตะใครล่ะนั่น?")
+                return
+
+            # คำนวณคะแนนเสียงที่ต้องการ (กึ่งหนึ่งของคนในห้องเสียงนั้น + 1)
+            required_votes = max(2, len(members_in_voice) // 2 + 1)
+
+            target_member = None
+            if message.mentions:
+                target_member = message.mentions[0]
+            else:
+                search_name = msg[len("doro โหวตเตะ"):].strip()
+                if search_name:
+                    target_member = discord.utils.find(lambda m: search_name in m.display_name or search_name in m.name, members_in_voice)
+
+            if not target_member:
+                await message.channel.send("❗ กรุณาระบุชื่อหรือ Mention คนในห้องเสียงด้วย เช่น `doro โหวตเตะ @ชื่อเพื่อน`")
+                return
+                
+            if target_member.id == message.author.id:
+                await message.channel.send("จะโหวตเตะตัวเองทำไมก่อน! 😂")
+                return
+
+            view = VoteKickTypeView(target_member, required_votes)
+            await message.channel.send(f"🛠️ เลือกประเภทการเตะสำหรับ {target_member.mention} (ต้องการอย่างน้อย {required_votes} โหวต):", view=view)
             return
 
         if lower_msg == "doro เวลา":
@@ -473,6 +588,7 @@ async def on_message(message: discord.Message):
                     "**🔹 doro ล้างข้อความ<จำนวน>**\n"
                     "**🔹 doro รีเซ็ตchannel**\n"
                     "**🔹 doro ถาม**\n"
+                    "**🔹 doro โหวตเตะ <@ชื่อหรือMention>** (เตะออกห้องเสียง/เซิร์ฟ)\n"
                     "**🔹 doro ขอยศ (เมนูเลือกยศ)**\n"
                     "**🔹 doro คำสั่งเพลง**\n"
                     "**🔹 !join / !play / !skip / !stop / !queue**"
