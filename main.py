@@ -34,15 +34,6 @@ custom_responses = {
     "doro สวัสดี": "สวัสดีค่ะ ยินดีที่ได้คุยด้วยนะ!",
 }
 
-# Dynamic roles: ROLE_OPTIONS removed.
-ROLE_OPTIONS = []  # no longer used
-#
-    {"label": "จักพรรดิสวรรค์", "value": "จักพรรดิสวรรค์", "emoji": "🌸"},
-    {"label": "ผู้คุมกฎ", "value": "ผู้คุมกฎ", "emoji": "✍️"},
-    {"label": "สวรรค์และโลก", "value": "สวรรค์และโลก", "emoji": "🟧"},
-    {"label": "เซียน", "value": "เซียน", "emoji": "🪛"},
-]
-
 QUESTION_CHOICES = {
     "เอา / ไม่เอา / ไม่แน่ใจ": ["เอา", "ไม่เอา", "ไม่แน่ใจ"],
     "เล่น / ไม่เล่น": ["เล่น", "ไม่เล่น"],
@@ -117,50 +108,48 @@ def disable_all_items(view: discord.ui.View):
     for item in view.children:
         item.disabled = True
 
+# === Dynamic Role System (Patched) ===
 class RoleSelect(discord.ui.Select):
-    def __init__(self):
-        options = [
-            discord.SelectOption(label=r["label"], value=r["value"], emoji=r["emoji"])
-            for r in ROLE_OPTIONS
+    def __init__(self, guild):
+        roles = [
+            r for r in guild.roles
+            if r.name != "@everyone" and not r.managed
         ]
-        super().__init__(placeholder="เลือกยศของคุณ (เลือกได้หลายยศ)", min_values=1, max_values=len(options), options=options)
+        options = [
+            discord.SelectOption(label=r.name, value=str(r.id))
+            for r in roles[:25]  # Discord กำหนดให้มีเมนู Select สูงสุดได้ 25 ตัวเลือก
+        ]
+        super().__init__(
+            placeholder="เลือกยศของคุณ",
+            min_values=1,
+            max_values=1,
+            options=options
+        )
 
     async def callback(self, interaction: discord.Interaction):
-        selected_roles = self.values
-        guild_roles = interaction.guild.roles
-        selected_role_objs = [
-            discord.utils.get(guild_roles, name=role_name)
-            for role_name in selected_roles
-            if discord.utils.get(guild_roles, name=role_name)
-        ]
-        roles_to_remove = [
-            discord.utils.get(guild_roles, name=r["value"])
-            for r in ROLE_OPTIONS
-            if discord.utils.get(guild_roles, name=r["value"]) in interaction.user.roles and r["value"] not in selected_roles
-        ]
+        role = interaction.guild.get_role(int(self.values[0]))
+        if role is None:
+            return await interaction.response.send_message("ไม่พบยศนี้ในเซิร์ฟเวอร์", ephemeral=True)
         try:
-            if roles_to_remove:
-                await interaction.user.remove_roles(*roles_to_remove)
-            if selected_role_objs:
-                await interaction.user.add_roles(*selected_role_objs)
-            await interaction.response.send_message("✅ ยศของคุณถูกอัปเดตเรียบร้อยแล้ว", ephemeral=True)
+            await interaction.user.add_roles(role)
+            await interaction.response.send_message(f"✅ ได้รับยศ **{role.name}** เรียบร้อยแล้ว", ephemeral=True)
         except discord.Forbidden:
-            await interaction.response.send_message("❌ บอทไม่มีสิทธิ์จัดการยศ", ephemeral=True)
+            await interaction.response.send_message("❌ บอทไม่มีสิทธิ์ให้ยศนี้ (โปรดตรวจสอบสิทธิ์ Manage Roles และลำดับความสูงของยศบอท)", ephemeral=True)
 
 class RemoveRolesButton(discord.ui.Button):
     def __init__(self):
         super().__init__(label="ลบยศทั้งหมด", style=discord.ButtonStyle.danger, emoji="🗑️")
 
     async def callback(self, interaction: discord.Interaction):
+        # ดึงยศทั้งหมดของเซิร์ฟเวอร์ที่ไม่ใช่ยศระบบ เพื่อนำมาเช็คและลบออกจากตัวผู้ใช้
         roles_to_remove = [
-            discord.utils.get(interaction.guild.roles, name=r["value"])
-            for r in ROLE_OPTIONS
-            if discord.utils.get(interaction.guild.roles, name=r["value"]) in interaction.user.roles
+            r for r in interaction.user.roles
+            if r.name != "@everyone" and not r.managed
         ]
         try:
             if roles_to_remove:
                 await interaction.user.remove_roles(*roles_to_remove)
-            await interaction.response.send_message("🧹 ยศของคุณถูกลบทั้งหมดแล้ว", ephemeral=True)
+            await interaction.response.send_message("🧹 ยศทั่วไปของคุณถูกลบทั้งหมดแล้ว", ephemeral=True)
         except discord.Forbidden:
             await interaction.response.send_message("❌ บอทไม่มีสิทธิ์ลบยศ", ephemeral=True)
 
@@ -186,9 +175,9 @@ class TextInputButton(discord.ui.Button):
         await interaction.response.send_modal(modal)
 
 class RequestRoleView(discord.ui.View):
-    def __init__(self):
+    def __init__(self, guild):
         super().__init__(timeout=None)
-        self.add_item(RoleSelect())
+        self.add_item(RoleSelect(guild))
         self.add_item(RequestRoleButton())
         self.add_item(TextInputButton())
         self.add_item(RemoveRolesButton())
@@ -234,7 +223,6 @@ class VoteSelect(discord.ui.Select):
         user_votes = vote_records.setdefault(msg_id, {})
         user_votes[user.id] = self.values[0]
 
-        # Try to read embed description safely
         embed = interaction2.message.embeds[0] if interaction2.message.embeds else None
         choice_set_name = None
         if embed and embed.description:
@@ -245,14 +233,12 @@ class VoteSelect(discord.ui.Select):
         choices = QUESTION_CHOICES.get(choice_set_name, [])
         guild = interaction2.guild
 
-        # Build summary using display names when possible; fallback to mention
         summary = {ans: [] for ans in choices}
         for uid, ans in user_votes.items():
             member = guild.get_member(uid) if guild else None
             if member:
                 summary.setdefault(ans, []).append(member.display_name)
             else:
-                # Use mention fallback
                 summary.setdefault(ans, []).append(f"<@{uid}>")
 
         summary_text = ""
@@ -289,7 +275,7 @@ class AskQuestionView(discord.ui.View):
         self.add_item(self.select_choices)
 
         channels = [c for c in guild.channels if isinstance(c, discord.TextChannel)]
-        channel_options = [discord.SelectOption(label=ch.name, value=str(ch.id)) for ch in channels]
+        channel_options = [discord.SelectOption(label=ch.name, value=str(ch.id)) for ch in channels[:25]]
         self.select_question_channel = discord.ui.Select(
             placeholder="📢 เลือกห้องส่งคำถาม",
             options=channel_options,
@@ -368,12 +354,10 @@ async def on_message(message: discord.Message):
     msg = message.content.strip()
     lower_msg = msg.lower()
 
-    # Save simple context history
     user_contexts.setdefault(user_id, []).append((user_id, username, msg))
     if len(user_contexts[user_id]) > 5:
         user_contexts[user_id].pop(0)
 
-    # Prefix-free commands (text triggers)
     try:
         if lower_msg == "doro ขอยศ":
             embed = discord.Embed(
@@ -520,7 +504,6 @@ async def on_message(message: discord.Message):
             await message.channel.send(embed=embed)
             return
 
-        # custom textual responses
         if lower_msg in custom_responses:
             await message.channel.send(custom_responses[lower_msg])
             return
@@ -528,7 +511,6 @@ async def on_message(message: discord.Message):
     except Exception:
         logger.exception("Error while handling text triggers")
 
-    # Allow commands with prefix (!) to run
     await bot.process_commands(message)
 
 # --- Music commands (commands.Bot style) ---
@@ -586,7 +568,6 @@ async def play_cmd(ctx: commands.Context, *, query: str = None):
     music_queues[guild_id].append(track)
     await ctx.send(f"✅ เพิ่มเพลง **{track['title']}** ลงในคิว โดย {track['requester']}")
 
-    # if nothing is playing, start
     voice_client = discord.utils.get(bot.voice_clients, guild=ctx.guild)
     if voice_client and not voice_client.is_playing() and not voice_client.is_paused():
         await play_next_in_queue(ctx.guild)
@@ -668,45 +649,3 @@ if __name__ == "__main__":
     except Exception:
         logger.exception("Error starting server_on() (may be fine if not needed)")
     bot.run(DISCORD_TOKEN)
-
-
-# ===== Dynamic Role System Patch =====
-class RoleSelect(discord.ui.Select):
-    def __init__(self, guild):
-        roles = [
-            r for r in guild.roles
-            if r.name != "@everyone" and not r.managed
-        ]
-        options = [
-            discord.SelectOption(label=r.name, value=str(r.id))
-            for r in roles[:25]
-        ]
-        super().__init__(
-            placeholder="เลือกยศ",
-            min_values=1,
-            max_values=1,
-            options=options
-        )
-
-    async def callback(self, interaction):
-        role = interaction.guild.get_role(int(self.values[0]))
-        if role is None:
-            return await interaction.response.send_message("ไม่พบยศ", ephemeral=True)
-        try:
-            await interaction.user.add_roles(role)
-            await interaction.response.send_message(
-                f"ได้รับยศ {role.name} แล้ว", ephemeral=True
-            )
-        except discord.Forbidden:
-            await interaction.response.send_message(
-                "บอทไม่มีสิทธิ์ให้ยศ (ตรวจสอบ Manage Roles และลำดับยศ)", ephemeral=True
-            )
-
-class RequestRoleView(discord.ui.View):
-    def __init__(self, guild):
-        super().__init__(timeout=None)
-        self.add_item(RoleSelect(guild))
-        self.add_item(RequestRoleButton())
-        self.add_item(TextInputButton())
-        self.add_item(RemoveRolesButton())
-# ===== End Patch =====
