@@ -35,14 +35,9 @@ custom_responses = {
     "doro สวัสดี": "สวัสดีค่ะ ยินดีที่ได้คุยด้วยนะ!",
 }
 
-QUESTION_CHOICES = {
-    "เอา / ไม่เอา / ไม่แน่ใจ": ["เอา", "ไม่เอา", "ไม่แน่ใจ"],
-    "เล่น / ไม่เล่น": ["เล่น", "ไม่เล่น"],
-    "ใช่ / ไม่ใช่": ["ใช่", "ไม่ใช่"],
-}
-
 user_contexts = {}
-vote_records = {}  
+vote_records = {}  # เก็บข้อมูลโหวตของโพล {msg_id: {user_id: chosen_option}}
+poll_result_messages = {} # เก็บ map ระหว่าง {โพล_msg_id: ผลสรุป_msg_id} สำหรับไปตาม Edit
 music_queues = {}  
 now_playing = {}   
 
@@ -124,7 +119,7 @@ class BotCommandControlSelect(discord.ui.Select):
             
         elif value == "setup_poll":
             view = AskQuestionView(interaction.guild)
-            await interaction.response.send_message("📋 **ตั้งค่าระบบโพลคำถาม:** โปรดเลือกเงื่อนไขด้านล่างให้ครบถ้วนก่อนส่งคำถาม", view=view, ephemeral=True)
+            await interaction.response.send_message("📋 **ตั้งค่าระบบโพลคำถาม:** โปรดเลือกห้องแชทและกรอกข้อมูลคำถามให้ครบถ้วนก่อนปล่อยโพลนะ", view=view, ephemeral=True)
             
         elif value == "setup_kick":
             embed = discord.Embed(
@@ -146,7 +141,7 @@ class BotCommandControlSelect(discord.ui.Select):
                     "**🔹 doro เวลา**\n"
                     "**🔹 doro โหวตเตะ** : เรียกหน้าต่าง UI เพื่อโหวตเตะสมาชิก\n"
                     "**🔹 doroส่งข้อความ <ช่อง_id> <ข้อความ>** *(แอดมิน)*\n"
-                    "**🔹 doro ลบข้อความ <จำนวน>** *(ผู้จัดการข้อความ)*\n"
+                    "**🔹 doro ล้างข้อความ <จำนวน>** *(ผู้จัดการข้อความ)*\n"
                     "**🔹 doro รีเซ็ตchannel**\n"
                     "**🔹 doro คำสั่งเพลง** : ดูชุดคำสั่ง !play !skip !stop ทั้งหมด"
                 ),
@@ -211,9 +206,14 @@ class RequestRoleView(discord.ui.View):
         self.add_item(RemoveRolesButton())
 
 
-# --- Poll UI System ---
-class AskQuestionTextModal(discord.ui.Modal, title="✍️ กรอกรายละเอียดคำถาม"):
-    question = discord.ui.TextInput(label="หัวข้อคำถามโพลของคุณ", style=discord.TextStyle.paragraph)
+# --- 📊 NEW Poll UI System (ระบบโพลกรอกช้อยส์เองอิสระ + อัปเดตไม่สแปมแชท) ---
+class AskQuestionTextModal(discord.ui.Modal, title="✍️ รายละเอียดคำถามโพล"):
+    question = discord.ui.TextInput(label="หัวข้อคำถามโพล", style=discord.TextStyle.short, placeholder="เช่น เย็นนี้กินอะไรกันดี?")
+    choices_input = discord.ui.TextInput(
+        label="ตัวเลือกคำตอบ (แยกตัวเลือกด้วยเครื่องหมายจุลภาค ,)", 
+        style=discord.TextStyle.paragraph, 
+        placeholder="เช่น ชาบู, หมูกระทะ, ก๋วยเตี๋ยว, ส้มตำ"
+    )
 
     def __init__(self, parent_view):
         super().__init__()
@@ -221,11 +221,20 @@ class AskQuestionTextModal(discord.ui.Modal, title="✍️ กรอกราย
 
     async def on_submit(self, interaction: discord.Interaction):
         self.parent_view.question_text = self.question.value
-        await interaction.response.send_message("✏️ บันทึกคำถามลงในระบบชั่วคราวแล้ว", ephemeral=True)
+        # แยกช้อยส์ด้วยลูกน้ำ และลบช่องว่างหัวท้ายออก
+        parsed_choices = [c.strip() for c in self.choices_input.value.split(",") if c.strip()]
+        
+        if len(parsed_choices) < 2:
+            return await interaction.response.send_message("❗ กรุณากรอกตัวเลือกอย่างน้อย 2 ตัวเลือกขึ้นไป (เช่น ช้อยส์1, ช้อยส์2)", ephemeral=True)
+        if len(parsed_choices) > 25:
+            return await interaction.response.send_message("❗ ตัวเลือกเยอะเกินไป บอทรองรับสูงสุด 25 ตัวเลือกครับ", ephemeral=True)
+            
+        self.parent_view.poll_choices = parsed_choices
+        await interaction.response.send_message(f"✏️ บันทึกคำถามและตัวเลือก ({len(parsed_choices)} ช้อยส์) ลงระบบชั่วคราวแล้ว", ephemeral=True)
 
 class OpenQuestionModalButton(discord.ui.Button):
     def __init__(self, parent_view):
-        super().__init__(label="✏️ กรอกคำถาม", style=discord.ButtonStyle.secondary)
+        super().__init__(label="✏️ กรอกคำถามและตัวเลือก", style=discord.ButtonStyle.secondary)
         self.parent_view = parent_view
 
     async def callback(self, interaction: discord.Interaction):
@@ -240,31 +249,30 @@ class SubmitQuestionButton(discord.ui.Button):
         await self.parent_view.submit_question(interaction)
 
 class VoteSelect(discord.ui.Select):
-    def __init__(self, choices, result_channel_id):
-        opts = [discord.SelectOption(label=opt) for opt in choices]
+    def __init__(self, choices, result_channel_id, all_choices_list):
+        opts = [discord.SelectOption(label=opt[:100]) for opt in choices]
         super().__init__(placeholder="🗳️ กดเพื่อโหวตคำตอบของคุณ...", options=opts, min_values=1, max_values=1)
         self.result_channel_id = result_channel_id
+        self.all_choices_list = all_choices_list  # เก็บช้อยส์ทั้งหมดของโพลนี้ไว้แกะตอนสรุป
 
     async def callback(self, interaction2: discord.Interaction):
         user = interaction2.user
-        msg_id = interaction2.message.id
-        user_votes = vote_records.setdefault(msg_id, {})
+        poll_msg_id = interaction2.message.id
+        
+        # บันทึกคะแนนโหวตของผู้ใช้ลงหน่วยความจำ
+        user_votes = vote_records.setdefault(poll_msg_id, {})
         user_votes[user.id] = self.values[0]
 
-        embed = interaction2.message.embeds[0] if interaction2.message.embeds else None
-        choice_set_name = None
-        if embed and embed.description:
-            parts = embed.description.split('\n')
-            if parts: choice_set_name = parts[0]
-
-        choices = QUESTION_CHOICES.get(choice_set_name, [])
         guild = interaction2.guild
-
-        summary = {ans: [] for ans in choices}
+        
+        # คำนวณสรุปผลคะแนน
+        summary = {ans: [] for ans in self.all_choices_list}
         for uid, ans in user_votes.items():
             member = guild.get_member(uid) if guild else None
-            if member: summary.setdefault(ans, []).append(member.display_name)
-            else: summary.setdefault(ans, []).append(f"<@{uid}>")
+            if member: 
+                summary.setdefault(ans, []).append(member.display_name)
+            else: 
+                summary.setdefault(ans, []).append(f"<@{uid}>")
 
         summary_text = ""
         for ans in summary:
@@ -273,55 +281,79 @@ class VoteSelect(discord.ui.Select):
             if voters: summary_text += "   ↳ " + ", ".join(voters) + "\n"
 
         result_channel = guild.get_channel(self.result_channel_id) if guild else None
+        
         if result_channel:
-            await result_channel.send(embed=discord.Embed(title="📊 ผลโหวตล่าสุดอัปเดตแล้ว", description=summary_text, color=0x87CEEB))
-        await interaction2.response.send_message(f"✅ บันทึกคะแนนโหวตโพลคำตอบ [{self.values[0]}] ของคุณแล้ว", ephemeral=True, delete_after=3)
+            embed_res = discord.Embed(
+                title="📊 ผลโหวตเรียลไทม์ (อัปเดตอัตโนมัติ)", 
+                description=f"ผลสรุปของคำถาม: **{interaction2.message.embeds[0].fields[0].value if interaction2.message.embeds else 'โพล'}**\n\n{summary_text}", 
+                color=0x87CEEB
+            )
+            
+            # ตรวจสอบว่าเคยสร้างข้อความสรุปผลในห้องนั้นหรือยัง? ถ้ามีแล้วให้ Edit แทนการ Send ใหม่
+            res_msg_id = poll_result_messages.get(poll_msg_id)
+            if res_msg_id:
+                try:
+                    old_msg = await result_channel.fetch_message(res_msg_id)
+                    await old_msg.edit(embed=embed_res)
+                except discord.NotFound:
+                    # ถ้าข้อความเดิมเผลอโดนลบ ให้ส่งใหม่
+                    new_res_msg = await result_channel.send(embed=embed_res)
+                    poll_result_messages[poll_msg_id] = new_res_msg.id
+            else:
+                # ส่งข้อความสรุปครั้งแรกสุด
+                new_res_msg = await result_channel.send(embed=embed_res)
+                poll_result_messages[poll_msg_id] = new_res_msg.id
+
+        await interaction2.response.send_message(f"✅ บันทึกคะแนนโหวตของคุณเรียบร้อยแล้ว", ephemeral=True, delete_after=2)
 
 class AskQuestionView(discord.ui.View):
     def __init__(self, guild):
         super().__init__(timeout=None)
         self.guild = guild
         self.question_text = None
-
-        self.select_choices = discord.ui.Select(
-            placeholder="📦 1. เลือกชุดคำตอบของโพล",
-            options=[discord.SelectOption(label=key, value=key) for key in QUESTION_CHOICES.keys()]
-        )
-        self.add_item(self.select_choices)
+        self.poll_choices = []
 
         channels = [c for c in guild.channels if isinstance(c, discord.TextChannel)]
         channel_options = [discord.SelectOption(label=f"#{ch.name}", value=str(ch.id)) for ch in channels[:25]]
         
-        self.select_question_channel = discord.ui.Select(placeholder="📢 2. เลือกห้องที่จะปล่อยคำถาม", options=channel_options)
+        self.select_question_channel = discord.ui.Select(placeholder="📢 1. เลือกห้องที่จะปล่อยคำถามโพล", options=channel_options)
         self.add_item(self.select_question_channel)
 
-        self.select_result_channel = discord.ui.Select(placeholder="📊 3. เลือกห้องสรุปคะแนนโหวต", options=channel_options)
+        self.select_result_channel = discord.ui.Select(placeholder="📊 2. เลือกห้องสรุปคะแนนโหวต", options=channel_options)
         self.add_item(self.select_result_channel)
 
         self.add_item(OpenQuestionModalButton(self))
         self.add_item(SubmitQuestionButton(self))
 
     async def submit_question(self, interaction: discord.Interaction):
-        if not self.question_text:
-            return await interaction.response.send_message("❗ กรุณากรอกหัวข้อคำถามผ่านปุ่ม 'กรอกคำถาม' ก่อนส่ง", ephemeral=True)
-        choice_set_name = self.select_choices.values[0] if self.select_choices.values else None
+        if not self.question_text or not self.poll_choices:
+            return await interaction.response.send_message("❗ กรุณากรอกหัวข้อคำถามและช้อยส์ผ่านปุ่ม 'กรอกคำถามและตัวเลือก' ก่อนส่งนะ", ephemeral=True)
+            
         q_ch_id = int(self.select_question_channel.values[0]) if self.select_question_channel.values else None
         r_ch_id = int(self.select_result_channel.values[0]) if self.select_result_channel.values else None
 
-        if not (choice_set_name and q_ch_id and r_ch_id):
-            return await interaction.response.send_message("❗ โปรดเลือกชุดคำตอบ ช่องส่งคำถาม และห้องสรุปคะแนนให้ครบถ้วนก่อน", ephemeral=True)
+        if not (q_ch_id and r_ch_id):
+            return await interaction.response.send_message("❗ โปรดเลือกห้องปล่อยคำถาม และห้องสรุปคะแนนโหวตให้ครบถ้วนก่อนส่งโพล", ephemeral=True)
 
-        choices = QUESTION_CHOICES.get(choice_set_name)
         q_channel = self.guild.get_channel(q_ch_id)
         
-        embed = discord.Embed(title="📢 โพลคำถามจากสมาชิกในเซิร์ฟเวอร์", description=f"{choice_set_name}\n\n**คำถาม:** {self.question_text}", color=discord.Color.pink())
+        embed = discord.Embed(title="📢 ขอเชิญร่วมลงคะแนนโหวตประชามติ", color=discord.Color.pink())
+        embed.add_field(name="❓ คำถามโพล", value=self.question_text, inline=False)
+        
+        # แสดงรายการช้อยส์ใน Embed ให้ผู้ใช้เห็นชัดเจนก่อนกด
+        choices_desc = "\n".join([f"🔹 {c}" for c in self.poll_choices])
+        embed.add_field(name="📦 รายการตัวเลือก", value=choices_desc, inline=False)
+        
         vote_view = discord.ui.View(timeout=None)
-        vote_view.add_item(VoteSelect(choices, r_ch_id))
+        vote_view.add_item(VoteSelect(self.poll_choices, r_ch_id, self.poll_choices))
         
         sent_msg = await q_channel.send(embed=embed, view=vote_view)
         vote_records[sent_msg.id] = {}
-        await interaction.response.send_message(f"✅ ปล่อยโพลเรียบร้อยแล้วค่ะ ที่ห้อง {q_channel.mention}", ephemeral=True)
+        
+        await interaction.response.send_message(f"✅ ปล่อยโพลเรียบร้อยแล้วที่ห้อง {q_channel.mention}", ephemeral=True)
+        # รีเซ็ตค่าเพื่อป้องกันการส่งซ้ำ
         self.question_text = None
+        self.poll_choices = []
 
 
 # --- Vote Kick UI System ---
@@ -335,14 +367,14 @@ class MemberSelect(discord.ui.UserSelect):
         
         # ตรวจสอบเบื้องต้น
         if target_member.id == interaction.user.id:
-            return await interaction.response.send_message("จะโหวตเตะตัวเองไม่ได้นะคะ! 😂", ephemeral=True)
+            return await interaction.response.send_message("จะโหวตเตะตัวเองไม่ได้นะ! 😂", ephemeral=True)
         if target_member.bot:
-            return await interaction.response.send_message("บอทเป็นอมตะ โหวตเตะไม่ได้หรอกนะคะ 🤖", ephemeral=True)
+            return await interaction.response.send_message("บอทเป็นอมตะ โหวตเตะไม่ได้หรอกนะ 🤖", ephemeral=True)
 
         # ดึง Member object เต็มๆ เพื่อเช็คสถานะออนไลน์
         member_obj = interaction.guild.get_member(target_member.id)
         if not member_obj:
-            return await interaction.response.send_message("❌ ไม่พบสมาชิกคนนี้ในเซิร์ฟเวอร์เลยนะคะ", ephemeral=True)
+            return await interaction.response.send_message("❌ ไม่พบสมาชิกคนนี้ในเซิร์ฟเวอร์", ephemeral=True)
 
         online_members = [m for m in self.guild.members if m.status != discord.Status.offline and not m.bot]
         required_votes = max(2, len(online_members) // 2 + 1)
@@ -350,8 +382,8 @@ class MemberSelect(discord.ui.UserSelect):
         view = VoteKickTypeView(member_obj, required_votes)
         
         embed = discord.Embed(
-            title="🛠️ ตั้งค่าระบบประชามติโหวตเตะสมาชิกค่ะ",
-            description=f"เป้าหมาย: {member_obj.mention}\nโปรดกดปุ่มด้านล่างเพื่อเลือกรูปแบบมาตรการลงทัณฑ์ค่ะ",
+            title="🛠️ ตั้งค่าระบบประชามติโหวตเตะ",
+            description=f"เป้าหมาย: {member_obj.mention}\nโปรดกดปุ่มด้านล่างเพื่อเลือกรูปแบบมาตรการลงทัณฑ์",
             color=0xF1C40F
         )
         await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
@@ -383,7 +415,6 @@ class KickTypeButton(discord.ui.Button):
             for item in self.view.children: item.disabled = True
             await interaction.response.edit_message(view=self.view)
             
-        # ส่งกระดานคะแนนแบบเปิดเผยลงห้องแชทสาธารณะเพื่อให้ทุกคนร่วมกดโหวต
         await interaction.channel.send(embed=embed, view=view)
 
 class VoteKickTypeView(discord.ui.View):
@@ -454,8 +485,8 @@ async def on_message(message: discord.Message):
         # 🎛️ เรียกหน้าเมนูหน้าต่าง UI ควบคุมรวมคำสั่งทั้งหมด
         if lower_msg == "doro เมนู":
             embed = discord.Embed(
-                title="⚙️ Doro แผงควบคุมระบบอัจฉริยะค่ะ ",
-                description="ยินดีต้อนรับสู่หน้า ระบบ คุณสามารถกดเลือกเมนูด้านล่างนี้เพื่อเปิดใช้งานฟังก์ชันรับยศ, ส่งโพลคำถาม หรือเปิดระบบโหวตเตะสมาชิกได้อย่างรวดเร็วค่ะ",
+                title="⚙️ Doro แผงควบคุมระบบอัจฉริยะ (UI Mode)",
+                description="ยินดีต้อนรับสู่โหมด UI! คุณสามารถกดเลือกเมนูด้านล่างนี้เพื่อเปิดใช้งานฟังก์ชันรับยศ, ส่งโพลคำถาม หรือเปิดระบบโหวตเตะสมาชิกได้อย่างรวดเร็วครับ",
                 color=0x3498DB
             )
             view = BotControlMenuView(message.guild)
@@ -465,25 +496,19 @@ async def on_message(message: discord.Message):
         # คำสั่งโหวตเตะแบบใหม่ผ่านระบบ UI Dropdown
         if lower_msg == "doro โหวตเตะ":
             embed = discord.Embed(
-                title="🚫 ขอเริ่มวาระโหวตเตะสมาชิกนะคะ",
-                description="โปรดเลือกรายชื่อสมาชิกที่คุณต้องการเริ่มโหวตลงมติเตะจากเมนูด้านล่างนี้ได้เลยค่ะ",
+                title="🚫 เริ่มวาระโหวตเตะสมาชิก (UI Mode)",
+                description="โปรดเลือกรายชื่อสมาชิกที่คุณต้องการเริ่มโหวตลงมติเตะจากเมนูด้านล่างนี้ครับ",
                 color=discord.Color.red()
             )
             view = MemberSelectView(message.guild)
             await message.channel.send(embed=embed, view=view)
             return
 
-        # --- คำสั่งพื้นฐานเดิม ---
-        if lower_msg == "doro เวลา":
-            now = datetime.now(pytz.timezone('Asia/Bangkok'))
-            await message.channel.send(f"🕒 เวลาปัจจุบัน: {now.strftime('%Y-%m-%d %H:%M:%S')}")
-            return
-
+        # คำสั่งสรุปสถิติสมาชิกเวอร์ชันปรับปรุงใหม่ (แก้ปัญหาสแปมห้อง)
         if lower_msg == "doro สมาชิกทั้งหมด":
             guild = message.guild
             if guild is None: return
             
-            # นับจำนวนแยกตามสถานะ
             online = sum(1 for m in guild.members if m.status == discord.Status.online)
             idle = sum(1 for m in guild.members if m.status == discord.Status.idle)
             dnd = sum(1 for m in guild.members if m.status == discord.Status.dnd)
@@ -505,12 +530,17 @@ async def on_message(message: discord.Message):
             await message.channel.send(embed=embed)
             return
 
+        if lower_msg == "doro เวลา":
+            now = datetime.now(pytz.timezone('Asia/Bangkok'))
+            await message.channel.send(f"🕒 เวลาปัจจุบัน: {now.strftime('%Y-%m-%d %H:%M:%S')}")
+            return
+
         if lower_msg.startswith("doro ค้นหา"):
             search_term = msg[len("doro ค้นหา"):].strip()
             if not search_term: return
             results = VideosSearch(search_term, limit=1).result()
             if not results.get("result"): return
-            await message.channel.send(f"🎬 คลิป: **{results['result'][0]['title']}**\n🔗 {results['result'][0]['link']}")
+            await message.channel.send(f"🎵 คลิป: **{results['result'][0]['title']}**\n🔗 {results['result'][0]['link']}")
             return
 
         if lower_msg.startswith("doroส่งข้อความ") or lower_msg.startswith("doro ส่งข้อความ"):
@@ -521,7 +551,7 @@ async def on_message(message: discord.Message):
                 if ch: await ch.send(f"@everyone {content[1]}")
             return
 
-        if lower_msg.startswith("doroลบข้อความ") or lower_msg.startswith("doro ลบข้อความ"):
+        if lower_msg.startswith("doroล้างข้อความ") or lower_msg.startswith("doro ล้างข้อความ"):
             if not message.author.guild_permissions.manage_messages: return
             count_str = msg[len("doroล้างข้อความ" if lower_msg.startswith("doroล้างข้อความ") else "doro ล้างข้อความ"):].strip()
             try:
