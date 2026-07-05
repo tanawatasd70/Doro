@@ -317,13 +317,24 @@ class AskQuestionView(discord.ui.View):
         channel_options = [discord.SelectOption(label=f"#{ch.name}", value=str(ch.id)) for ch in channels[:25]]
         
         self.select_question_channel = discord.ui.Select(placeholder="📢 1. เลือกห้องที่จะปล่อยคำถามโพล", options=channel_options)
+        # 🟢 เพิ่ม Callback เพื่อบอก Discord ว่ารับทราบการเลือกห้องปล่อยโพลแล้ว
+        self.select_question_channel.callback = self.on_select_channel
         self.add_item(self.select_question_channel)
 
         self.select_result_channel = discord.ui.Select(placeholder="📊 2. เลือกห้องสรุปคะแนนโหวต", options=channel_options)
+        # 🟢 เพิ่ม Callback เพื่อบอก Discord ว่ารับทราบการเลือกห้องสรุปผลแล้ว
+        self.select_result_channel.callback = self.on_select_channel
         self.add_item(self.select_result_channel)
 
         self.add_item(OpenQuestionModalButton(self))
         self.add_item(SubmitQuestionButton(self))
+
+    # 🟢 ฟังก์ชันเงียบๆ ที่ช่วยตอบกลับ Discord ภายใน 3 วินาที (แก้ตัวหนังสือแดง)
+    async def on_select_channel(self, interaction: discord.Interaction):
+        try:
+            await interaction.response.defer()  # บอก Discord ว่ารับทราบแล้ว ไม่มีอะไรผิดพลาด
+        except Exception:
+            pass
 
     async def submit_question(self, interaction: discord.Interaction):
         if not self.question_text or not self.poll_choices:
@@ -340,7 +351,6 @@ class AskQuestionView(discord.ui.View):
         embed = discord.Embed(title="📢 ขอเชิญร่วมลงคะแนนโหวตประชามติ", color=discord.Color.pink())
         embed.add_field(name="❓ คำถามโพล", value=self.question_text, inline=False)
         
-        # แสดงรายการช้อยส์ใน Embed ให้ผู้ใช้เห็นชัดเจนก่อนกด
         choices_desc = "\n".join([f"🔹 {c}" for c in self.poll_choices])
         embed.add_field(name="📦 รายการตัวเลือก", value=choices_desc, inline=False)
         
@@ -351,7 +361,6 @@ class AskQuestionView(discord.ui.View):
         vote_records[sent_msg.id] = {}
         
         await interaction.response.send_message(f"✅ ปล่อยโพลเรียบร้อยแล้วที่ห้อง {q_channel.mention}", ephemeral=True)
-        # รีเซ็ตค่าเพื่อป้องกันการส่งซ้ำ
         self.question_text = None
         self.poll_choices = []
 
