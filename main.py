@@ -60,8 +60,7 @@ def load_roblox_data():
             return json.load(f)
     except FileNotFoundError:
         default_data = {
-            "blox_fruits": {"name": "🏴‍☠️ Blox Fruits", "url": "https://www.roblox.com/"},
-            "king_legacy": {"name": "👑 King Legacy", "url": "https://www.roblox.com/"}
+            
         }
         save_roblox_data(default_data)
         return default_data
