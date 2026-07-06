@@ -179,6 +179,23 @@ class MusicSearchModal(discord.ui.Modal, title="🎵 ค้นหาและเ
         target_msg = self.current_msg if self.current_msg else interaction.message
         await update_music_menu_embed(target_msg, guild)
 
+class MultiChannelModal(discord.ui.Modal, title="🏗️ สร้างห้องแชทหลายห้อง"):
+    def __init__(self, guild):
+        super().__init__()
+        self.guild = guild
+        self.channel_names = discord.ui.TextInput(
+            label="ชื่อห้อง (คั่นด้วยเครื่องหมาย ,)",
+            placeholder="ห้องคุยเล่น, ห้องปาร์ตี้, ห้องพักผ่อน",
+            style=discord.TextStyle.paragraph,
+            required=True
+        )
+        self.add_item(self.channel_names)
+
+    async def on_submit(self, interaction: discord.Interaction):
+        names = [n.strip() for n in self.channel_names.value.split(",") if n.strip()]
+        for name in names:
+            await self.guild.create_text_channel(name)
+        await interaction.response.send_message(f"✅ สร้างห้อง {len(names)} ห้องเรียบร้อยแล้วค๊าา!", ephemeral=True)
 
 # ==========================================
 # 🎛️ MAIN UI COMMAND MENU 
