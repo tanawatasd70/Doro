@@ -565,9 +565,9 @@ class ClearChannelView(discord.ui.View):
         await interaction.message.edit(embed=generate_main_menu_embed(self.guild), view=BotControlMenuView(self.guild))
 
 
-# ==========================================
-# 📊 NEW FEATURE: MEMBER ANALYTICS SYSTEM
-# ==========================================
+# =====================================================================
+# 📊 UPDATE FEATURE: MEMBER ANALYTICS SYSTEM (ระบบเปลี่ยนหน้า ไม่สร้างกล่องแชทใหม่)
+# =====================================================================
 class MemberAnalyticsView(discord.ui.View):
     def __init__(self, guild):
         super().__init__(timeout=None)
@@ -575,7 +575,7 @@ class MemberAnalyticsView(discord.ui.View):
 
     @discord.ui.button(label="📈 สถิติภาพรวมเซิร์ฟ", style=discord.ButtonStyle.success, emoji="📊", row=0)
     async def server_stats(self, interaction: discord.Interaction, btn):
-        await interaction.response.defer(ephemeral=True)
+        await interaction.response.defer()
         
         all_members = self.guild.member_count
         bots = len([m for m in self.guild.members if m.bot])
@@ -588,19 +588,20 @@ class MemberAnalyticsView(discord.ui.View):
         embed.add_field(name="🟢 กำลังออนไลน์ (มนุษย์)", value=f"**{online_humans}** คน", inline=True)
         embed.add_field(name="🔊 กำลังคุยในห้องเสียง", value=f"**{in_vc}** คน", inline=True)
         
-        await interaction.followup.send(embed=embed, ephemeral=True)
+        # เปลี่ยนหน้าข้อมูลของกล่องเดิมโดยใช้ View ของตัวเอง เพื่อให้คงปุ่มสำหรับย้อนกลับหรือเปลี่ยนหัวข้อได้
+        await interaction.message.edit(embed=embed, view=self)
 
     @discord.ui.button(label="👑 รายชื่อทีมงานที่ออนไลน์", style=discord.ButtonStyle.secondary, emoji="🛡️", row=0)
     async def staff_list(self, interaction: discord.Interaction, btn):
-        await interaction.response.defer(ephemeral=True)
+        await interaction.response.defer()
         staff = [m.mention for m in self.guild.members if not m.bot and m.guild_permissions.kick_members and m.status != discord.Status.offline]
         
         embed = discord.Embed(title="🛡️ ทีมงานที่พร้อมสแตนด์บายค๊าา", description="\n".join(staff) if staff else "งื้อออ ตอนนี้แอดมินออฟไลน์กันหมดเยยค๊าา", color=0xF1C40F)
-        await interaction.followup.send(embed=embed, ephemeral=True)
+        await interaction.message.edit(embed=embed, view=self)
 
     @discord.ui.button(label="🔍 ค้นหาคนไร้ยศ", style=discord.ButtonStyle.primary, emoji="👤", row=0)
     async def unassigned_members(self, interaction: discord.Interaction, btn):
-        await interaction.response.defer(ephemeral=True)
+        await interaction.response.defer()
         no_role = [m.mention for m in self.guild.members if not m.bot and len(m.roles) == 1]
         
         embed = discord.Embed(title="👤 รายชื่อสมาชิกที่ยังไม่มีบทบาท/ยศใดๆ", color=0xE67E22)
@@ -610,11 +611,12 @@ class MemberAnalyticsView(discord.ui.View):
         else:
             embed.description = "🎉 ยอดเยี่ยมมากค๊าา! ทุกคนในเซิร์ฟเวอร์นี้มียศติดตัวกันหมดเรียบร้อยแล้วจ้าา"
             
-        await interaction.followup.send(embed=embed, ephemeral=True)
+        await interaction.message.edit(embed=embed, view=self)
 
     @discord.ui.button(label="🔙 ย้อนกลับหน้าแรก", style=discord.ButtonStyle.danger, emoji="⬅️", row=1)
     async def back(self, interaction: discord.Interaction, btn):
         await interaction.response.defer()
+        # เปลี่ยนกลับไปแสดงผลหน้าจอศูนย์ควบคุมหลัก (เมนูแรกสุด)
         await interaction.message.edit(embed=generate_main_menu_embed(self.guild), view=BotControlMenuView(self.guild))
 
 
