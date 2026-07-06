@@ -20,7 +20,7 @@ from threading import Thread
 app = Flask('')
 @app.route('/')
 def home():
-    return "🤖 Doro Bot UI Engine with Music is Fully Active! ✨"
+    return "🤖 Doro Bot UI Engine with Super Poll is Fully Active! ✨"
 
 def run_server():
     port = int(os.environ.get("PORT", 8080))
@@ -59,8 +59,9 @@ custom_responses = {
     "doro สวัสดี": "งื้อออ สวัสดีค่าา! ยินดีที่ได้คุยด้วยนะคะ วันนี้มีอะไรให้หนูช่วยไหมเอ่ย? 🌸",
 }
 
-vote_records = {}  
-poll_result_messages = {} 
+# 📊 3-in-1 POLL GLOBAL STORAGE
+# โครงสร้าง: { message_id: { "question": "xxx", "ideas": [ {"text": "xxx", "votes": 0, "voters": [...] } ] } }
+brainstorm_polls = {}
 JSON_FILE = "roblox_servers.json"
 
 def load_roblox_data():
@@ -293,7 +294,7 @@ class BotCommandControlSelect(discord.ui.Select):
             discord.SelectOption(label="🎵 เปิดระบบควบคุมและเล่นเพลง", description="เข้าสู่หน้าต่างควบคุมมิวสิคบอร์ด เปิดเพลง/เลือกเพลงค๊าา", value="setup_music"),
             discord.SelectOption(label="🧹 เปิดระบบล้างข้อความแชท", description="ลบข้อความขยะ/รีเซ็ตล้างห้องแชทให้เกลี้ยงในพริบตา", value="setup_clear"),
             discord.SelectOption(label="🛡️ เปิดระบบจัดการ/ขอยศ", description="เรียกเมนู Dropdown เลือกรับยศ และปุ่มขอยศสุดน่ารัก", value="setup_roles"),
-            discord.SelectOption(label="📊 เปิดระบบสร้างคำถามโพล", description="สร้างโพลน่ารัก ๆ เพื่อโหวตเลือกคำตอบกันเถอะ", value="setup_poll"),
+            discord.SelectOption(label="💡 ระบบโพลระดมสมอง & ไอเดีย (3-in-1)", description="แชร์ไอเดียอิสระ โหวตอัปโหวต พร้อมสรุปยอดสุดอัจฉริยะ", value="setup_poll"),
             discord.SelectOption(label="🎮 รวมลิงก์ Private Server Roblox", description="คลังแสงลิงก์เซิร์ฟเวอร์วีเกมต่าง ๆ ของชาว Robloxค๊าา", value="roblox_servers"),
             discord.SelectOption(label="🚫 เริ่มวาระโหวตเตะสมาชิก", description="เลือกคนที่ทำตัวไม่น่ารักเพื่อเริ่มโหวตเตะกันค่ะ!", value="setup_kick"),
             discord.SelectOption(label="📊 ตรวจสอบข้อมูลสมาชิกกลุ่ม (NEW!)", description="เช็คสถิติแบบเรียลไทม์ ตรวจสอบแอดมิน และคนไม่มียศค๊าา", value="setup_analytics"),
@@ -328,7 +329,12 @@ class BotCommandControlSelect(discord.ui.Select):
             embed = discord.Embed(title="🛡️ ระบบจัดการยศอัตโนมัติค๊าา", description="คุณชอบยศไหนเลือกรับจากเมนูด้านล่างนี้ได้เลยนะค๊าา หรือจะกดปุ่มขอยศพิเศษพร้อมส่งเหตุผลอ้อน ๆ มาให้แอดมินดูก็ได้น้าา~ ✨", color=0xFFB6C1)
             await interaction.message.edit(embed=embed, view=RequestRoleView(current_guild))
         elif value == "setup_poll":
-            embed = discord.Embed(title="📊 ระบบสร้างคำถามโพลระดมความคิดค๊าา", description="กรุณากรอกหัวข้อคำถาม และเลือกช่องทางปล่อยโพลให้ครบถ้วนด้านล่างนี้เลยน้าา~ ✨", color=0x9B59B6)
+            embed = discord.Embed(
+                title="💡 ศูนย์สร้างโพลระดมสมองและแชร์ไอเดียอัจฉริยะ", 
+                description="ยินดีต้อนรับเข้าสู่ระบบโพลแบบเปิดค๊าา! \n"
+                            "คุณพี่สามารถระบุหัวข้อที่ต้องการชวนเพื่อน ๆ คุย จากนั้นทุกคนในห้องแชทจะสามารถ **'พิมพ์ไอเดียเพิ่มเป็นช้อยส์'** และช่วยกัน **'กดดันโหวตไอเดียที่ชอบ'** ขึ้นบนได้แบบลื่นไหลเลยค๊าา 🚀✨", 
+                color=0x9B59B6
+            )
             await interaction.message.edit(embed=embed, view=AskQuestionView(current_guild))
         elif value == "roblox_servers":
             embed = discord.Embed(title="🎮 คลังแสง Private Server ของแก๊งเรา! 🚀", description="อยากไปฟาร์ม ไปเวล หรือไปตึงเกมไหน เลือกชื่อเกมจากเมนูด้านล่างนี้ได้เลยค๊าา\n(สำหรับแอดมินสามารถกดปุ่มเพื่อเพิ่มหรือลบเกมได้เลยนะค๊าา) ✨", color=0x00E5FF)
@@ -349,7 +355,7 @@ class BotCommandControlSelect(discord.ui.Select):
                     "* **🎵 มิวสิคบอร์ดแยกแท็บ**: เข้าหน้าต่างควบคุมเพลงและคิวได้แบบเป็นสัดส่วนผ่าน Dropdown\n"
                     "* **🧹 ระบบล้างแชทและรีเซ็ตห้อง**: สั่งกวาดล้างข้อความขยะ หรือล้างห้องแชทให้ขาวสะอาด 100% ด้วยปุ่ม Nuke\n"
                     "* **🛡️ ระบบแจกและขอยศสุดตึง**: เลือกรับยศเอง หรือส่งคำขออ้อน ๆ มาขอยศพิเศษก็ได้น้าา\n"
-                    "* **📊 โพลระดมความคิด**: สร้างคำถามและส่งไปห้องที่ต้องการ พร้อมระบบนับคะแนนเรียลไทม์\n"
+                    "* **💡 โพลระดมความคิด 3-in-1**: พิมพ์แชร์ไอเดียเพิ่มเข้าโพลล์ได้อิสระ โหวตดันอันดับ และปิดสเตจคัดเลือกไฟนอล\n"
                     "* **🎮 คลังแสงเซิร์ฟ Roblox**: รวมลิงก์ตั๋วเข้า Private Server เกมโปรดของแก๊งเราไว้ที่เดียว\n"
                     "* **🚫 ศาลเตี้ยโหวตเตะ**: เปิดวาระโหวตลงมติเพื่อดีดออกจากห้องเสียงหรือเซิร์ฟเวอร์\n"
                     "* **📊 ระบบตรวจสอบสมาชิก (Analytics)**: เช็คสถิติแบบเรียลไทม์ ตรวจดูทีมงาน และค้นหาคนไร้ยศ\n\n"
@@ -565,9 +571,9 @@ class ClearChannelView(discord.ui.View):
         await interaction.message.edit(embed=generate_main_menu_embed(self.guild), view=BotControlMenuView(self.guild))
 
 
-# =====================================================================
-# 📊 UPDATE FEATURE: MEMBER ANALYTICS SYSTEM (ระบบเปลี่ยนหน้า ไม่สร้างกล่องแชทใหม่)
-# =====================================================================
+# ==========================================
+# 📊 MEMBER ANALYTICS SYSTEM
+# ==========================================
 class MemberAnalyticsView(discord.ui.View):
     def __init__(self, guild):
         super().__init__(timeout=None)
@@ -588,7 +594,6 @@ class MemberAnalyticsView(discord.ui.View):
         embed.add_field(name="🟢 กำลังออนไลน์ (มนุษย์)", value=f"**{online_humans}** คน", inline=True)
         embed.add_field(name="🔊 กำลังคุยในห้องเสียง", value=f"**{in_vc}** คน", inline=True)
         
-        # เปลี่ยนหน้าข้อมูลของกล่องเดิมโดยใช้ View ของตัวเอง เพื่อให้คงปุ่มสำหรับย้อนกลับหรือเปลี่ยนหัวข้อได้
         await interaction.message.edit(embed=embed, view=self)
 
     @discord.ui.button(label="👑 รายชื่อทีมงานที่ออนไลน์", style=discord.ButtonStyle.secondary, emoji="🛡️", row=0)
@@ -616,7 +621,6 @@ class MemberAnalyticsView(discord.ui.View):
     @discord.ui.button(label="🔙 ย้อนกลับหน้าแรก", style=discord.ButtonStyle.danger, emoji="⬅️", row=1)
     async def back(self, interaction: discord.Interaction, btn):
         await interaction.response.defer()
-        # เปลี่ยนกลับไปแสดงผลหน้าจอศูนย์ควบคุมหลัก (เมนูแรกสุด)
         await interaction.message.edit(embed=generate_main_menu_embed(self.guild), view=BotControlMenuView(self.guild))
 
 
@@ -767,7 +771,7 @@ class RequestRoleView(discord.ui.View):
         await interaction.response.send_modal(TextInputModal())
     @discord.ui.button(label="ลบยศออกให้หมดเยย", style=discord.ButtonStyle.danger, row=1)
     async def rem_btn(self, interaction: discord.Interaction, btn):
-        await interaction.response.defer()
+        await interaction.user.defer()
         roles = [r for r in interaction.user.roles if r.name != "@everyone" and not r.managed]
         if roles: 
             await interaction.user.remove_roles(*roles)
@@ -777,73 +781,194 @@ class RequestRoleView(discord.ui.View):
         await interaction.message.edit(embed=generate_main_menu_embed(self.guild), view=BotControlMenuView(self.guild))
 
 
-# ==========================================
-# 📊 POLL SYSTEM COMPONENTS
-# ==========================================
-class AskQuestionTextModal(discord.ui.Modal):
+# =====================================================================
+# 💡 NEW UPDATE: 3-in-1 BRAINSTORM POLL SYSTEM (ระบบเปิดให้แชร์+อัปโหวตดันขึ้นบน)
+# =====================================================================
+class CreateBrainstormPollModal(discord.ui.Modal, title="✏️ ตั้งหัวข้อโพลระดมสมอง & ไอเดีย"):
     def __init__(self, parent_view):
-        super().__init__(title="✍️ รายละเอียดคำถามโพลแสนสนุก")
+        super().__init__()
         self.parent_view = parent_view
-        self.question = discord.ui.TextInput(label="หัวข้อคำถามโพลนี้คืออะไรเอ่ย?")
-        self.choices_input = discord.ui.TextInput(label="ตัวเลือกคำตอบ (แยกด้วยเครื่องหมาย , น้าา)", style=discord.TextStyle.paragraph)
+        self.question = discord.ui.TextInput(
+            label="หัวข้อคำถาม/กิจกรรมที่ชวนระดมไอเดีย", 
+            placeholder="เช่น ปาร์ตี้ปิดเทอมนี้แก๊งเราจะไปเที่ยวไหนกันดี?", 
+            required=True
+        )
         self.add_item(self.question)
-        self.add_item(self.choices_input)
-    async def on_submit(self, interaction: discord.Interaction):
-        self.parent_view.question_text = self.question.value.strip()
-        self.parent_view.poll_choices = [c.strip() for c in self.choices_input.value.split(",") if c.strip()]
-        await interaction.response.send_message("✏️ บันทึกโพลเรียบร้อย!", ephemeral=True)
 
-class VoteSelect(discord.ui.Select):
-    def __init__(self, choices, result_channel_id, all_choices):
-        super().__init__(placeholder="🗳️ กดโหวตคำตอบที่คุณชอบเลยน้าา...", options=[discord.SelectOption(label=o[:90]) for o in choices])
-        self.res_id = result_channel_id
-        self.all_choices = all_choices
-    async def callback(self, interaction: discord.Interaction):
-        p_id = interaction.message.id
-        u_votes = vote_records.setdefault(p_id, {})
-        u_votes[interaction.user.id] = self.values[0]
-        await interaction.response.send_message("✅ โหวตเสร็จสิ้น!", ephemeral=True, delete_after=2)
+    async def on_submit(self, interaction: discord.Interaction):
+        await interaction.response.defer()
+        q_text = self.question.value.strip()
+        
+        # ปล่อยกล่องข้อความโพลระบบเปิดกลางห้องแชท
+        embed = discord.Embed(
+            title=f"💡 โพลด่วนชวนระดมสมอง: {q_text}",
+            description="--------------------------------------------------\n"
+                        "ยังไม่มีใครส่งไอเดียเลยค๊าา มาร่วมเป็นคนแรกกันเถอะ! 👇\n"
+                        "--------------------------------------------------\n"
+                        "💡 **กติกาแสนสนุก:**\n"
+                        "1. กดปุ่ม `📥 พิมพ์ไอเดียเพิ่ม` เพื่อพิมพ์เสนอช้อยส์ใหม่ของตัวเองลงโพลล์\n"
+                        "2. กดเลือกชื่อไอเดียจาก Dropdown เพื่อช่วย **อัปโหวต (Upvote ❤️)** ดันคะแนนขึ้นอันดับหนึ่งค๊าา!",
+            color=0x9B59B6
+        )
+        embed.set_footer(text="ระบบรวบรวมไอเดียสดเพื่อหาประชามติที่ดีที่สุด 🚀")
+        
+        # ส่งข้อความโพลของจริงออกไปที่ชาแนล
+        poll_msg = await interaction.channel.send(embed=embed)
+        
+        # บันทึกลงหน่วยความจำชั่วคราว
+        brainstorm_polls[poll_msg.id] = {
+            "question": q_text,
+            "ideas": []
+        }
+        
+        # เปิด View สำหรับหน้าโพลใช้งานจริงให้คนในเซิร์ฟกดเล่นกัน
+        await poll_msg.edit(view=LiveBrainstormPollView(poll_msg.id))
+        
+        # อัปเดตข้อความที่ห้องควบคุมหลักให้รับทราบ
+        status_embed = discord.Embed(title="✅ ปล่อยโพลระบบเปิดสำเร็จค๊าา!", description=f"บอทได้ทำการเสกกล่องระดมไอเดียเรื่อง **'{q_text}'** ออกไปในห้องแชทเรียบร้อยแล้วน้าา สั่งปิดสรุปยอดตอนไหนก็ได้เลยจ้าา", color=0x2ECC71)
+        await interaction.message.edit(embed=status_embed, view=AskQuestionView(self.parent_view.guild))
 
 class AskQuestionView(discord.ui.View):
     def __init__(self, guild):
         super().__init__(timeout=None)
         self.guild = guild
-        self.question_text = None
-        self.poll_choices = []
-        self.target_id = None
-        self.result_id = None
-        channels = [discord.SelectOption(label=f"#{ch.name}"[:40], value=str(ch.id)) for ch in guild.channels if isinstance(ch, discord.TextChannel)][:25]
-        
-        self.s1 = discord.ui.Select(placeholder="📢 1. เลือกห้องที่จะปล่อยโพล", options=channels, row=0)
-        self.s2 = discord.ui.Select(placeholder="📊 2. เลือกห้องที่จะให้สรุปคะแนน", options=channels, row=1)
-        self.s1.callback = self.c1
-        self.s2.callback = self.c2
-        self.add_item(self.s1)
-        self.add_item(self.s2)
 
-    async def c1(self, interaction): 
-        self.target_id = int(self.s1.values[0])
-        await interaction.response.defer()
-    async def c2(self, interaction): 
-        self.result_id = int(self.s2.values[0])
-        await interaction.response.defer()
+    @discord.ui.button(label="✏️ เริ่มสร้างโพลระดมสมองกันเลย!", style=discord.ButtonStyle.success, emoji="💡")
+    async def create_poll_btn(self, interaction: discord.Interaction, btn):
+        await interaction.response.send_modal(CreateBrainstormPollModal(self))
 
-    @discord.ui.button(label="✏️ กรอกคำถามโพล", style=discord.ButtonStyle.primary, row=2)
-    async def input_btn(self, interaction: discord.Interaction, btn): 
-        await interaction.response.send_modal(AskQuestionTextModal(self))
-    @discord.ui.button(label="🚀 ยืนยันปล่อยโพลเลย", style=discord.ButtonStyle.success, row=2)
-    async def send_btn(self, interaction: discord.Interaction, btn):
-        if not self.question_text or not self.poll_choices or not self.target_id or not self.result_id: return
-        chan = self.guild.get_channel(self.target_id)
-        if chan:
-            v_view = discord.ui.View(timeout=None)
-            v_view.add_item(VoteSelect(self.poll_choices, self.result_id, self.poll_choices))
-            msg = await chan.send(embed=discord.Embed(title=f"❓ โพล: {self.question_text}", color=0xFFC0CB), view=v_view)
-            vote_records[msg.id] = {}
-            await interaction.response.send_message("✅ ปล่อยโพลสำเร็จค๊าา!", ephemeral=True)
-    @discord.ui.button(label="🔙 ย้อนกลับหน้าแรก", style=discord.ButtonStyle.secondary, emoji="⬅️", row=3)
+    @discord.ui.button(label="🔙 ย้อนกลับหน้าแรก", style=discord.ButtonStyle.secondary, emoji="⬅️")
     async def back(self, interaction: discord.Interaction, btn): 
+        await interaction.response.defer()
         await interaction.message.edit(embed=generate_main_menu_embed(self.guild), view=BotControlMenuView(self.guild))
+
+# --- หน้าโพลตัวจริงที่ผู้ใช้ทั่วไปเห็นในแชท ---
+class LiveIdeaDropdown(discord.ui.Select):
+    def __init__(self, poll_id):
+        self.poll_id = poll_id
+        poll_data = brainstorm_polls.get(poll_id, {"ideas": []})
+        
+        # เรียงลำดับโชว์ในเมนู Dropdown ตามความฮิต (Upvote สูงสุดอยู่บนสุด)
+        sorted_ideas = sorted(poll_data["ideas"], key=lambda x: x["votes"], reverse=True)[:25]
+        
+        options = []
+        for idx, idea in enumerate(sorted_ideas):
+            options.append(discord.SelectOption(label=f"❤️ [{idea['votes']}] {idea['text']}"[:95], value=idea['text']))
+            
+        if not options:
+            options = [discord.SelectOption(label="ยังไม่มีไอเดียในระบบ กดเพิ่มปุ่มสีเขียวได้เลยค๊าา", value="none")]
+            
+        super().__init__(placeholder="🗳️ กดเลือกไอเดียจากตรงนี้เพื่ออัปโหวต (Upvote)...", options=options, custom_id=f"sel_{poll_id}")
+
+    async def callback(self, interaction: discord.Interaction):
+        await interaction.response.defer(ephemeral=True)
+        val = self.values[0]
+        if val == "none": return
+        
+        poll_data = brainstorm_polls.get(self.poll_id)
+        if not poll_data: return
+        
+        for idea in poll_data["ideas"]:
+            if idea["text"] == val:
+                if interaction.user.id in idea["voters"]:
+                    idea["voters"].remove(interaction.user.id)
+                    idea["votes"] -= 1
+                    await interaction.followup.send("💔 ถอนคะแนนอัปโหวตออกจากไอเดียนี้เรียบร้อยค๊าา", ephemeral=True)
+                else:
+                    idea["voters"].append(interaction.user.id)
+                    idea["votes"] += 1
+                    await interaction.followup.send(f"❤️ กดอัปโหวตให้ไอเดีย '{val}' เรียบร้อย! ดันขึ้นอันดับบนให้แล้วน้าา", ephemeral=True)
+                break
+                
+        await update_live_poll_embed(interaction.message, self.poll_id)
+
+class AddNewIdeaModal(discord.ui.Modal, title="📥 แชร์ไอเดียใหม่ของคุณเพิ่มเข้าโพลล์"):
+    def __init__(self, poll_id):
+        super().__init__()
+        self.poll_id = poll_id
+        self.idea_input = discord.ui.TextInput(label="พิมพ์ไอเดียเด็ด ๆ ของคุณ (จะแปลงเป็นตัวเลือกโพลทันที)", placeholder="เช่น ไปพูลวิลล่าส่วนตัวแถวหัวหิน 🏡", required=True)
+        self.add_item(self.idea_input)
+
+    async def on_submit(self, interaction: discord.Interaction):
+        await interaction.response.defer(ephemeral=True)
+        new_text = self.idea_input.value.strip()
+        poll_data = brainstorm_polls.get(self.poll_id)
+        if not poll_data: return
+        
+        # ป้องกันไอเดียซ้ำ
+        if any(i["text"].lower() == new_text.lower() for i in poll_data["ideas"]):
+            return await interaction.followup.send("❌ ไอเดียนี้มีคนเสนอไปเรียบร้อยแล้วค๊าา ลองช่วยกดอัปโหวตให้เพื่อนแทนได้น้าา", ephemeral=True)
+            
+        poll_data["ideas"].append({
+            "text": new_text,
+            "votes": 1,
+            "voters": [interaction.user.id] # คนคิดได้สิทธิ์โหวตคนแรก
+        })
+        
+        await interaction.followup.send(f"🎉 สำเร็จ! ไอเดีย '{new_text}' ถูกบรรจุเข้าสู่ระบอบตัวเลือกโพลเรียบร้อยแล้วค๊าา", ephemeral=True)
+        await update_live_poll_embed(interaction.message, self.poll_id)
+
+class LiveBrainstormPollView(discord.ui.View):
+    def __init__(self, poll_id):
+        super().__init__(timeout=None)
+        self.poll_id = poll_id
+        self.add_item(LiveIdeaDropdown(poll_id))
+
+    @discord.ui.button(label="📥 พิมพ์ไอเดียเพิ่ม", style=discord.ButtonStyle.success, emoji="✨", custom_id="add_btn_dyn", row=1)
+    async def add_idea_btn(self, interaction: discord.Interaction, btn):
+        await interaction.response.send_modal(AddNewIdeaModal(self.poll_id))
+
+    @discord.ui.button(label="🏆 ปิดโพล & สรุปผลไฟนอล", style=discord.ButtonStyle.danger, emoji="📊", custom_id="close_btn_dyn", row=1)
+    async def finish_poll_btn(self, interaction: discord.Interaction, btn):
+        if not interaction.user.guild_permissions.manage_messages:
+            return await interaction.response.send_message("❌ เฉพาะทีมงานแอดมินเท่านั้นที่มีสิทธิ์ปิดและสรุปผลยอดโพลล์ค๊าา", ephemeral=True)
+            
+        await interaction.response.defer()
+        poll_data = brainstorm_polls.get(self.poll_id)
+        if not poll_data: return
+        
+        # จัดเรียงหาของดีระดับ Top 3 ถึง Top 5
+        sorted_ideas = sorted(poll_data["ideas"], key=lambda x: x["votes"], reverse=True)
+        
+        embed = discord.Embed(title=f"🏁 บทสรุปมติเอกฉันท์: {poll_data['question']}", color=0xE74C3C)
+        embed.description = "🔒 **ปิดรับคะแนนเรียบร้อยค๊าา!** และนี่คือผลลัพธ์ของสุดยอดไอเดียที่ได้รับความนิยมสูงสุดจากทุกคนในเซิร์ฟเวอร์:\n\n"
+        
+        medals = ["🥇 อันดับ 1", "🥈 อันดับ 2", "🥉 อันดับ 3", "🎖️ อันดับ 4", "🎖️ อันดับ 5"]
+        if sorted_ideas:
+            for idx, idea in enumerate(sorted_ideas[:5]):
+                embed.add_field(name=f"{medals[idx]} ({idea['votes']} โหวต ❤️)", value=f">>> **{idea['text']}**", inline=False)
+        else:
+            embed.description += "งื้อออ ไม่มีสมาชิกส่งไอเดียหรือร่วมอัปโหวตเลยค๊าา โพลนี้เหงาจังเยย 🥺"
+            
+        embed.set_footer(text="สรุปผลด้วยระบบวิเคราะห์คะแนนความนิยม Doro Analytics ✨")
+        await interaction.message.edit(embed=embed, view=None) # ลบปุ่มออกทั้งหมดเพื่อจบงานถาวร
+
+async def update_live_poll_embed(message, poll_id):
+    poll_data = brainstorm_polls.get(poll_id)
+    if not poll_data: return
+    
+    sorted_ideas = sorted(poll_data["ideas"], key=lambda x: x["votes"], reverse=True)
+    
+    embed = discord.Embed(title=f"💡 โพลด่วนชวนระดมสมอง: {poll_data['question']}", color=0x9B59B6)
+    
+    desc = "--------------------------------------------------\n"
+    if sorted_ideas:
+        desc += "📊 **กระดานจัดอันดับไอเดีย (เรียงตามแรงอัปโหวตสูงสุด):**\n"
+        for idx, idea in enumerate(sorted_ideas[:10]): # แสดง 10 อันดับแรกบนการ์ด
+            desc += f"⭐ **{idx+1}.** {idea['text']} — `❤️ {idea['votes']} โหวต`\n"
+    else:
+        desc += "ยังไม่มีใครส่งไอเดียเลยค๊าา มาร่วมเป็นคนแรกกันเถอะ! 👇\n"
+        
+    desc += "--------------------------------------------------\n"
+    desc += "💡 **กติกาแสนสนุก:**\n"
+    desc += "1. กดปุ่ม `📥 พิมพ์ไอเดียเพิ่ม` เพื่อพิมพ์เสนอช้อยส์ใหม่ของตัวเองลงโพลล์\n"
+    desc += "2. กดเลือกชื่อไอเดียจาก Dropdown เพื่อช่วย **อัปโหวต (Upvote ❤️)** ดันคะแนนขึ้นอันดับหนึ่งค๊าา!"
+    
+    embed.description = desc
+    embed.set_footer(text="ระบบรวบรวมไอเดียสดเพื่อหาประชามติที่ดีที่สุด 🚀")
+    
+    # อัปเดต UI หน้าตาข้อความพร้อมแนบ View ใหม่ที่มีรายการ Dropdown ตัวเลือกล่าสุด
+    await message.edit(embed=embed, view=LiveBrainstormPollView(poll_id))
 
 
 # ==========================================
