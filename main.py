@@ -86,6 +86,9 @@ def save_roblox_data(data):
 # ==========================================
 # 🔓 UPDATED: DYNAMIC GROUP ROLE VIEW (หวานแหวว + Ephemeral 100%)
 # ==========================================
+# ==========================================
+# 🔓 UPDATED & FIXED: DYNAMIC GROUP ROLE VIEW (หวานแหวว + Ephemeral หายเองชัวร์!)
+# ==========================================
 class DynamicGroupJoinView(discord.ui.View):
     def __init__(self, role_id: int, emoji_str: str):
         super().__init__(timeout=None)
@@ -110,8 +113,9 @@ class DynamicGroupJoinView(discord.ui.View):
         self.add_item(btn)
 
     async def button_callback(self, interaction: discord.Interaction):
-        # 🤫 บังคับระบุ ephemeral=True ตั้งแต่จังหวะแรก เพื่อให้เด้งเห็นคนเดียวแล้วหายไปตามรูป image_d2b326.png เลยค๊าา
+        # 🤫 ส่งสัญญาณ Defer แบบ Ephemeral
         await interaction.response.defer(ephemeral=True)
+        
         role = interaction.guild.get_role(self.role_id)
         if not role:
             return await interaction.followup.send("❌ งื้อออ น้อนหาตัวยศนี้ในเซิร์ฟไม่เจอ แอดมินจ๋าแอบลบยศไปหรือเปล่านะคะ? 🥺", ephemeral=True)
@@ -119,11 +123,12 @@ class DynamicGroupJoinView(discord.ui.View):
         if role in interaction.user.roles:
             try:
                 await interaction.user.remove_roles(role)
+                # ✨ ใส่ ephemeral=True ตรงนี้เพื่อให้ข้อความหายไปเองค๊าา
                 return await interaction.followup.send(f"🏃‍♂️ ถอนยศ **{role.name}** และออกจากกลุ่มเรียบร้อยแล้วน้าา ไว้แวะมาหาหนูใหม่นะคะคนดี~ 💕", ephemeral=True)
             except discord.Forbidden:
                 return await interaction.followup.send("❌ งื้อออ น้อนไม่มีสิทธิ์ถอนยศนี้ให้เลยค๊าา ระดับยศหนูต่ำเกินไป ขอโทษน้าา 🥺", ephemeral=True)
 
-        # 👑 จังหวะกดรับยศสำเร็จ -> ข้อความหวานเจี๊ยบเด้งเปิดห้องลับตรงตามใจหวัง!
+        # 👑 จุดที่พลาดไป! ย้ำ ephemeral=True ตรงก้นคำสั่งส่งข้อความสำเร็จเรียบร้อยแล้วค๊าา
         try:
             await interaction.user.add_roles(role)
             await interaction.followup.send("🎉 ยินดีต้อนรับเข้าสู่กลุ่มค๊าา! มอบยศ M͟͞E͟͞M͟͞B͟͞E͟͞R͟͞ 💀 ให้เรียบร้อย ตอนนี้ห้องลับเปิดให้เข้าแล้วน้าา~ 💕", ephemeral=True)
