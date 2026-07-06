@@ -101,7 +101,7 @@ class BotCommandControlSelect(discord.ui.Select):
             discord.SelectOption(label="📊 เปิดระบบสร้างคำถามโพล", description="สร้างโพลน่ารัก ๆ เพื่อโหวตเลือกคำตอบกันเถอะ", value="setup_poll"),
             discord.SelectOption(label="🎮 รวมลิงก์ Private Server Roblox", description="คลังแสงลิงก์เซิร์ฟเวอร์วีเกมต่าง ๆ ของชาว Robloxค๊าา", value="roblox_servers"),
             discord.SelectOption(label="🚫 เริ่มวาระโหวตเตะสมาชิก", description="เลือกคนที่ทำตัวไม่น่ารักเพื่อเริ่มโหวตเตะกันค่ะ!", value="setup_kick"),
-            discord.SelectOption(label="📖 ดูคู่มือคำสั่งบอททั้งหมด", description="มาดูคู่มือการสั่งงานน้อน Doro ทั้งหมดกันงับ", value="show_commands")
+            discord.SelectOption(label="📖 ดูคู่มือคำสั่งบอททั้งหมด", description="มาดูคู่มือการสั่งงานและบันทึกความสามารถน้อน Doro กันงับ", value="show_commands")
         ]
         super().__init__(
             placeholder="🎛️ เลือกโหมดคำสั่งที่ต้องการให้น้อน Doro ทำงาน...", 
@@ -152,7 +152,7 @@ class BotCommandControlSelect(discord.ui.Select):
             view = MemberSelectView(current_guild)
             await interaction.message.edit(embed=embed, view=view)
 
-       elif value == "show_commands":
+        elif value == "show_commands":
             embed = discord.Embed(
                 title="📘 สมุดคู่มือและบันทึกความสามารถของน้อน Doro 🤖✨",
                 description=(
@@ -678,7 +678,7 @@ async def on_message(message: discord.Message):
         await message.channel.send(custom_responses[lower_msg])
         return
 
-    # คำสั่งเรียกแผงควบคุม UI หลัก (ดักคำผิดให้แล้วค๊าา)
+    # คำสั่งเรียกแผงควบคุม UI หลัก
     is_menu_cmd = False
     for keyword in ["เมนู", "เมณู", "เเมนู", "menu", "munu"]:
         if f"doro {keyword}" in lower_msg or f"doro{keyword}" in lower_msg:
