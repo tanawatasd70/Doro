@@ -434,23 +434,22 @@ class ClearChannelView(discord.ui.View):
     # 💥 ปุ่มวิเศษสำหรับรีเซ็ตล้างระดานแชลเนลแบบ 100% (Nuke Channel) 
     @discord.ui.button(label="🚨 รีเซ็ตห้องแชท (Nuke Channel)", style=discord.ButtonStyle.danger, emoji="💥", row=1)
     async def nuke_channel_btn(self, interaction: discord.Interaction, btn):
-        # เช็คสิทธิ์ว่าผู้กดมีสิทธิ์จัดการแชลเนลไหมเพื่อความปลอดภัยของเซิร์ฟเวอร์ค๊าา
         if not interaction.user.guild_permissions.manage_channels:
             return await interaction.response.send_message("❌ คุณพี่ต้องมีสิทธิ์ 'จัดการช่องแชลเนล' (Manage Channels) ถึงจะสั่งระเบิดห้องแชทได้นะค๊าางึมมม", ephemeral=True)
         
         await interaction.response.defer()
         current_channel = interaction.channel
         
-        # คลอนนิ่งห้องเก่าขึ้นมาใหม่ (สิทธิ์, ชื่อ, หมวดหมู่ เหมือนเดิมหมด)
+        # คลอนนิ่งห้องเก่าขึ้นมาใหม่
         new_channel = await current_channel.clone(reason="Doro UI Nuke / Channel Reset Action")
         
-        # ย้ายตำแหน่งห้องใหม่ให้ไปอยู่ที่เดียวกับห้องเก่าเป๊ะ ๆ 
+        # ย้ายตำแหน่งห้องใหม่ให้ไปอยู่ที่เดียวกับห้องเก่า
         await new_channel.edit(position=current_channel.position)
         
-        # ลบห้องเก่าทิ้งทลายประวัติแชทขยะทิ้งไปเยย!
+        # ลบห้องเก่าทิ้งทลายประวัติแชทขยะ
         await current_channel.delete(reason="Doro UI Nuke / Channel Reset Action")
         
-        # ส่งข้อความต้อนรับและ Gif สวย ๆ ในห้องใหม่ว่ารีเซ็ตเรียบร้อยแล้วค๊าา
+        # ส่งข้อความต้อนรับในห้องใหม่ และตั้งค่าให้หายไปภายใน 3 วินาที (delete_after=3)
         embed_nuke = discord.Embed(
             title="💥 ห้องแชทนี้ถูกรีเซ็ตเรียบร้อยแล้วค๊าา! (Channel Nuked Successfully)",
             description=f"🧹 น้อน Doro จัดการระเบิดแชทเก่าทิ้ง และกวาดล้างข้อมูลขยะทั้งหมดให้สะอาดเอี่ยมอ่อง 100% แล้วนะค๊าา! พร้อมใช้งานแชทใหม่แบบลื่น ๆ เยยย ✨\n\n*ผู้สั่งรีเซ็ตห้อง: {interaction.user.mention}*",
@@ -458,7 +457,13 @@ class ClearChannelView(discord.ui.View):
         )
         embed_nuke.set_image(url="https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExM2I4N2I5M2M5MmE0MDRmYjllNWE2ZGNmMDFlNTAwYjRjYmU0Zjg2ZiZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/hog2UAsK791U1mZ5r9/giphy.gif")
         
-        await new_channel.send(embed=embed_nuke)
+        # ✨ เพิ่ม delete_after=3 ตรงนี้เพื่อให้ข้อความและ GIF หายวับไปใน 3 วินาทีค๊าา!
+        await new_channel.send(embed=embed_nuke, delete_after=3)
+
+    @discord.ui.button(label="🔙 ย้อนกลับหน้าแรก", style=discord.ButtonStyle.success, emoji="⬅️", row=1)
+    async def back(self, interaction: discord.Interaction, btn):
+        await interaction.response.defer()
+        await interaction.message.edit(embed=generate_main_menu_embed(self.guild), view=BotControlMenuView(self.guild))
 
     @discord.ui.button(label="🔙 ย้อนกลับหน้าแรก", style=discord.ButtonStyle.success, emoji="⬅️", row=1)
     async def back(self, interaction: discord.Interaction, btn):
