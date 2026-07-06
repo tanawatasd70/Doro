@@ -78,7 +78,7 @@ def save_roblox_data(data):
 
 
 # ==========================================
-# 🔓 NEW FEATURE: DYNAMIC GROUP ROLE VIEW (🐈‍⬛ BLACK CAT THEME)
+# 🔓 DYNAMIC GROUP ROLE VIEW (🐈‍⬛ BLACK CAT THEME)
 # ==========================================
 class DynamicGroupJoinView(discord.ui.View):
     def __init__(self, role_id: int, emoji_str: str):
@@ -86,14 +86,12 @@ class DynamicGroupJoinView(discord.ui.View):
         self.role_id = role_id
         self.emoji_str = emoji_str
         
-        # ตั้งชื่อปุ่มตามอิโมจิที่แอดมินเลือกค๊าา
         btn_label = "รับยศกลุ่ม"
         if emoji_str == "🌸": btn_label = "ดอกไม้"
         elif emoji_str == "🔓": btn_label = "เข้าสู่กลุ่ม"
         elif emoji_str == "⚔️": btn_label = "รับยศนักรบ"
         elif emoji_str == "🔥": btn_label = "รับยศสายเดือด"
 
-        # ปรับสไตล์ปุ่มให้เข้ากับความเท่ (ถ้าเป็นดอกไม้ใช้ปุ่มสีแดง แต่อื่นๆ ใช้สีเทา/ดำหมองๆ เท่ๆ)
         btn_style = discord.ButtonStyle.danger if emoji_str == "🌸" else discord.ButtonStyle.secondary
 
         btn = discord.ui.Button(
@@ -124,20 +122,18 @@ class DynamicGroupJoinView(discord.ui.View):
         except discord.Forbidden:
             await interaction.followup.send("❌ น้อน Doro ไม่มีสิทธิ์แจกยศนี้ รบกวนแอดมินลากยศของบอทให้สูงกว่ายศที่จะแจกในตั้งค่าเซิร์ฟเวอร์น้าา", ephemeral=True)
 
-# แผงตั้งค่า UI สำหรับแอดมิน (เห็นคนเดียว)
 class RoleSetupAdminView(discord.ui.View):
     def __init__(self, guild):
         super().__init__(timeout=60)
         self.guild = guild
         self.selected_role_id = None
-        self.selected_emoji = "🌸" # Default เริ่มต้น
+        self.selected_emoji = "🌸"
 
         self.group_images = [
             "https://images.alphacoders.com/133/1330962.png",
             "https://images.alphacoders.com/112/1123447.jpg"
         ]
 
-        # Dropdown เลือกยศในเซิร์ฟ
         roles = [r for r in guild.roles if r.name != "@everyone" and not r.managed]
         role_options = [discord.SelectOption(label=r.name[:90], value=str(r.id)) for r in roles[:25]]
         
@@ -145,7 +141,6 @@ class RoleSetupAdminView(discord.ui.View):
         self.role_select.callback = self.role_callback
         self.add_item(self.role_select)
 
-        # Dropdown เลือกอิโมจิปุ่ม
         emoji_options = [
             discord.SelectOption(label="🌸 ดอกไม้ซากุระ (แบบในรูป)", value="🌸", emoji="🌸"),
             discord.SelectOption(label="🔓 กุญแจปลดล็อกห้อง", value="🔓", emoji="🔓"),
@@ -301,6 +296,7 @@ class BotCommandControlSelect(discord.ui.Select):
             discord.SelectOption(label="📊 เปิดระบบสร้างคำถามโพล", description="สร้างโพลน่ารัก ๆ เพื่อโหวตเลือกคำตอบกันเถอะ", value="setup_poll"),
             discord.SelectOption(label="🎮 รวมลิงก์ Private Server Roblox", description="คลังแสงลิงก์เซิร์ฟเวอร์วีเกมต่าง ๆ ของชาว Robloxค๊าา", value="roblox_servers"),
             discord.SelectOption(label="🚫 เริ่มวาระโหวตเตะสมาชิก", description="เลือกคนที่ทำตัวไม่น่ารักเพื่อเริ่มโหวตเตะกันค่ะ!", value="setup_kick"),
+            discord.SelectOption(label="📊 ตรวจสอบข้อมูลสมาชิกกลุ่ม (NEW!)", description="เช็คสถิติแบบเรียลไทม์ ตรวจสอบแอดมิน และคนไม่มียศค๊าา", value="setup_analytics"),
             discord.SelectOption(label="📖 ดูคู่มือคำสั่งบอททั้งหมด", description="มาดูคู่มือการสั่งงานและบันทึกความสามารถน้อน Doro กันงับ", value="show_commands")
         ]
         super().__init__(placeholder="🎛️ หรือเลือกโหมดทำงานอื่น ๆ ของน้อน Doro ที่นี่...", min_values=1, max_values=1, options=options, custom_id="doro_main_control_select", row=0)
@@ -340,6 +336,9 @@ class BotCommandControlSelect(discord.ui.Select):
         elif value == "setup_kick":
             embed = discord.Embed(title="🚫 ระบบโหวตเตะสมาชิก (โหมด Doro เอาจริง!)", description="โปรดเลือกรายชื่อคนที่ไม่น่ารักที่คุณต้องการเริ่มโหวตลงมติเตะด้านล่างนี้ได้เลยค่ะงึมมม", color=discord.Color.red())
             await interaction.message.edit(embed=embed, view=MemberSelectView(current_guild))
+        elif value == "setup_analytics":
+            embed = discord.Embed(title="📈 ศูนย์บริการข้อมูลสมาชิกเเละสถิติเชิงลึก", description="เลือกดูสถิติภาพรวม ตรวจสอบรายชื่อแอดมิน หรือค้นหาคนไร้ยศในเซิร์ฟเวอร์ได้เลยค๊าา ✨", color=0x2ECC71)
+            await interaction.message.edit(embed=embed, view=MemberAnalyticsView(current_guild))
         elif value == "show_commands":
             embed = discord.Embed(
                 title="📘 สมุดคู่มือและบันทึกความสามารถของน้อน Doro 🤖✨",
@@ -352,7 +351,8 @@ class BotCommandControlSelect(discord.ui.Select):
                     "* **🛡️ ระบบแจกและขอยศสุดตึง**: เลือกรับยศเอง หรือส่งคำขออ้อน ๆ มาขอยศพิเศษก็ได้น้าา\n"
                     "* **📊 โพลระดมความคิด**: สร้างคำถามและส่งไปห้องที่ต้องการ พร้อมระบบนับคะแนนเรียลไทม์\n"
                     "* **🎮 คลังแสงเซิร์ฟ Roblox**: รวมลิงก์ตั๋วเข้า Private Server เกมโปรดของแก๊งเราไว้ที่เดียว\n"
-                    "* **🚫 ศาลเตี้ยโหวตเตะ**: เปิดวาระโหวตลงมติเพื่อดีดออกจากห้องเสียงหรือเซิร์ฟเวอร์\n\n"
+                    "* **🚫 ศาลเตี้ยโหวตเตะ**: เปิดวาระโหวตลงมติเพื่อดีดออกจากห้องเสียงหรือเซิร์ฟเวอร์\n"
+                    "* **📊 ระบบตรวจสอบสมาชิก (Analytics)**: เช็คสถิติแบบเรียลไทม์ ตรวจดูทีมงาน และค้นหาคนไร้ยศ\n\n"
                     "--------------------------------------------------\n"
                     "**✍️ สรุปคำสั่งพิมพ์ด่วน (Quick Commands):**\n"
                     "🔹 **`doro เมนู` / `doro menu` / `doro คำสั่งเพลง`** : เรียกเปิดแผงควบคุมระบบ UI ทั้งหมดค๊าา\n"
@@ -386,14 +386,14 @@ def generate_main_menu_embed(guild):
 
     embed = discord.Embed(
         title="⚙️ Doro แผงควบคุมระบบอัจฉริยะสุดน่ารัก ❤️‍🔥", 
-        description="ยินดีต้อนรับค๊าา! ตอนนี้ปุ่มควบคุมเพลงถูกย้ายเข้าไปอยู่ในหัวข้อ แถบด้านล่าง นายสามารถเลือกโหมดใช้งานเราได้เลยน้าา ✨", 
+        description="ยินดีต้อนรับค๊าา! ตอนนี้ปุ่มควบคุมถูกรวบรวมเข้าไปอยู่ในเมนู Dropdown แถบด้านล่าง นายสามารถเลือกโหมดใช้งานเราได้เลยน้าา ✨", 
         color=0xFFB6C1
     )
     
     if vc and vc.is_connected() and song:
         status_str = "🟢 กำลังบรรเลงเพลงอย่างเพลิดเพลิน" if not vc.is_paused() else "⏸️ พักเสียงเพลงชั่วคราว"
         embed.add_field(
-            name="🎵 สถานะการเล่นเพลงปัจจุบัน",
+            name="🎵 Status การเล่นเพลงปัจจุบัน",
             value=f"**เพลง:** [{song['title']}]({song['webpage_url']})\n**ผู้ขอเพลง:** {song['requester']}\n**สถานะ:** {status_str}",
             inline=False
         )
@@ -405,7 +405,7 @@ def generate_main_menu_embed(guild):
             embed.add_field(name="📋 คิวเพลงถัดไปในแถว", value=q_txt, inline=False)
     else:
         embed.add_field(
-            name="🎵 สถานะการเล่นเพลงปัจจุบัน",
+            name="🎵 Status การเล่นเพลงปัจจุบัน",
             value="❌ ยังไม่ได้เปิดเพลง หรือน้อน Doro ยังไม่ได้เข้าห้องคุยเสียงค๊าา",
             inline=False
         )
@@ -543,7 +543,7 @@ class ClearChannelView(discord.ui.View):
     @discord.ui.button(label="🚨 รีเซ็ตห้องแชท (Nuke Channel)", style=discord.ButtonStyle.danger, emoji="💥", row=1)
     async def nuke_channel_btn(self, interaction: discord.Interaction, btn):
         if not interaction.user.guild_permissions.manage_channels:
-            return await interaction.response.send_message("❌ คุณพี่ต้องมีสิทธิ์ 'จัดการช่องแชลเนล' (Manage Channels) ถึงจะสั่งระเบิดห้องแชทได้นะค๊าางึมมม", ephemeral=True)
+            return await interaction.response.send_message("❌ คุณพี่ต้องมีสิทธิ์ 'จัดการช่องแชลเนล' ถึงจะสั่งระเบิดห้องได้นะค๊าา", ephemeral=True)
         
         await interaction.response.defer()
         current_channel = interaction.channel
@@ -553,13 +553,66 @@ class ClearChannelView(discord.ui.View):
         
         embed_nuke = discord.Embed(
             title="💥 ห้องแชทนี้ถูกรีเซ็ตเรียบร้อยแล้วค๊าา! (Channel Nuked Successfully)",
-            description=f"🧹 น้อน Doro จัดการระเบิดแชทเก่าทิ้ง และกวาดล้างข้อมูลขยะทั้งหมดให้สะอาดเอี่ยมอ่อง 100% แล้วนะค๊าา! พร้อมใช้งานแชทใหม่แบบลื่น ๆ เยยย ✨\n\n*ผู้สั่งรีเซ็ตห้อง: {interaction.user.mention}*",
+            description=f"🧹 น้อน Doro จัดการระเบิดแชทเก่าทิ้ง และกวาดข้อมูลขยะออกหมดแล้วค๊าา! ✨\n\n*ผู้สั่งรีเซ็ตห้อง: {interaction.user.mention}*",
             color=0xFF3E3E
         )
         embed_nuke.set_image(url="https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExM2I4N2I5M2M5MmE0MDRmYjllNWE2ZGNmMDFlNTAwYjRjYmU0Zjg2ZiZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/hog2UAsK791U1mZ5r9/giphy.gif")
         await new_channel.send(embed=embed_nuke, delete_after=3)
 
     @discord.ui.button(label="🔙 ย้อนกลับหน้าแรก", style=discord.ButtonStyle.success, emoji="⬅️", row=1)
+    async def back(self, interaction: discord.Interaction, btn):
+        await interaction.response.defer()
+        await interaction.message.edit(embed=generate_main_menu_embed(self.guild), view=BotControlMenuView(self.guild))
+
+
+# ==========================================
+# 📊 NEW FEATURE: MEMBER ANALYTICS SYSTEM
+# ==========================================
+class MemberAnalyticsView(discord.ui.View):
+    def __init__(self, guild):
+        super().__init__(timeout=None)
+        self.guild = guild
+
+    @discord.ui.button(label="📈 สถิติภาพรวมเซิร์ฟ", style=discord.ButtonStyle.success, emoji="📊", row=0)
+    async def server_stats(self, interaction: discord.Interaction, btn):
+        await interaction.response.defer(ephemeral=True)
+        
+        all_members = self.guild.member_count
+        bots = len([m for m in self.guild.members if m.bot])
+        humans = all_members - bots
+        online_humans = len([m for m in self.guild.members if not m.bot and m.status != discord.Status.offline])
+        in_vc = len([m for m in self.guild.members if m.voice])
+
+        embed = discord.Embed(title=f"📈 สถิติประชากรของ {self.guild.name}", color=0x2ECC71)
+        embed.add_field(name="👥 ประชากรทั้งหมด", value=f"**{all_members}** คน (มนุษย์: {humans} | บอท: {bots})", inline=False)
+        embed.add_field(name="🟢 กำลังออนไลน์ (มนุษย์)", value=f"**{online_humans}** คน", inline=True)
+        embed.add_field(name="🔊 กำลังคุยในห้องเสียง", value=f"**{in_vc}** คน", inline=True)
+        
+        await interaction.followup.send(embed=embed, ephemeral=True)
+
+    @discord.ui.button(label="👑 รายชื่อทีมงานที่ออนไลน์", style=discord.ButtonStyle.secondary, emoji="🛡️", row=0)
+    async def staff_list(self, interaction: discord.Interaction, btn):
+        await interaction.response.defer(ephemeral=True)
+        staff = [m.mention for m in self.guild.members if not m.bot and m.guild_permissions.kick_members and m.status != discord.Status.offline]
+        
+        embed = discord.Embed(title="🛡️ ทีมงานที่พร้อมสแตนด์บายค๊าา", description="\n".join(staff) if staff else "งื้อออ ตอนนี้แอดมินออฟไลน์กันหมดเยยค๊าา", color=0xF1C40F)
+        await interaction.followup.send(embed=embed, ephemeral=True)
+
+    @discord.ui.button(label="🔍 ค้นหาคนไร้ยศ", style=discord.ButtonStyle.primary, emoji="👤", row=0)
+    async def unassigned_members(self, interaction: discord.Interaction, btn):
+        await interaction.response.defer(ephemeral=True)
+        no_role = [m.mention for m in self.guild.members if not m.bot and len(m.roles) == 1]
+        
+        embed = discord.Embed(title="👤 รายชื่อสมาชิกที่ยังไม่มีบทบาท/ยศใดๆ", color=0xE67E22)
+        if no_role:
+            embed.description = ", ".join(no_role[:30]) + (f" ...และคนอื่น ๆ อีก {len(no_role)-30} คน" if len(no_role) > 30 else "")
+            embed.set_footer(text=f"พบทั้งหมด {len(no_role)} คนค๊าา")
+        else:
+            embed.description = "🎉 ยอดเยี่ยมมากค๊าา! ทุกคนในเซิร์ฟเวอร์นี้มียศติดตัวกันหมดเรียบร้อยแล้วจ้าา"
+            
+        await interaction.followup.send(embed=embed, ephemeral=True)
+
+    @discord.ui.button(label="🔙 ย้อนกลับหน้าแรก", style=discord.ButtonStyle.danger, emoji="⬅️", row=1)
     async def back(self, interaction: discord.Interaction, btn):
         await interaction.response.defer()
         await interaction.message.edit(embed=generate_main_menu_embed(self.guild), view=BotControlMenuView(self.guild))
@@ -666,11 +719,11 @@ class RobloxServerView(discord.ui.View):
     async def add_btn(self, interaction: discord.Interaction, btn): 
         await interaction.response.send_message("🎨 เลือกอิโมจิเพื่อเริ่มตั้งค่าเกมค๊าา:", view=RobloxEmojiSelectView(), ephemeral=True)
         
-    @discord.ui.button(label=" ลบเกม", style=discord.ButtonStyle.danger, emoji="🗑️", row=1)
+    @discord.ui.button(label="🗑️ ลบเกม", style=discord.ButtonStyle.danger, emoji="🗑️", row=1)
     async def del_btn(self, interaction: discord.Interaction, btn): 
         await interaction.response.send_modal(DeleteRobloxServerModal())
         
-    @discord.ui.button(label=" ย้อนกลับ", style=discord.ButtonStyle.secondary, emoji="⬅️", row=1)
+    @discord.ui.button(label="⬅️ ย้อนกลับ", style=discord.ButtonStyle.secondary, emoji="⬅️", row=1)
     async def back(self, interaction: discord.Interaction, btn): 
         await interaction.message.edit(embed=generate_main_menu_embed(self.guild), view=BotControlMenuView(self.guild))
 
@@ -963,7 +1016,6 @@ async def on_message(message: discord.Message):
             pass
         return
 
-    # 🐈‍⬛ แผงเสกรับยศสไตล์ แมวทมิฬ
     if lower_msg == "doro สร้างปุ่มรับยศ":
         if not message.author.guild_permissions.manage_roles: return
         try:
