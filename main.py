@@ -112,16 +112,14 @@ def play_next_song(guild_id, vc, channel):
     source = discord.FFmpegPCMAudio(song['url'], **FFMPEG_OPTIONS)
     vc.play(source, after=lambda e: play_next_song(guild_id, vc, channel))
     
-    # อัปเดตข้อความแผงควบคุมหลักเมื่อเปลี่ยนเพลง
     asyncio.run_coroutine_threadsafe(refresh_main_menu_msg(guild_id, channel), bot.loop)
 
 async def refresh_main_menu_msg(guild_id, channel):
-    # ฟังก์ชันนี้ใช้สำหรับรีเฟรชบอร์ดควบคุมเพลงในหน้าเมนูหลักให้เป็นปัจจุบัน
     pass
 
 
 # ==========================================
-# 🔍 MUSIC SEARCH MODAL (หน้าต่างพิมพ์ชื่อเพลง)
+# 🔍 MUSIC SEARCH MODAL
 # ==========================================
 class MusicSearchModal(discord.ui.Modal, title="🎵 ค้นหาและเพิ่มเพลงลงคิว"):
     def __init__(self):
@@ -177,7 +175,6 @@ class MusicSearchModal(discord.ui.Modal, title="🎵 ค้นหาและเ
             source = discord.FFmpegPCMAudio(song_data['url'], **FFMPEG_OPTIONS)
             vc.play(source, after=lambda e: play_next_song(guild_id, vc, interaction.channel))
 
-        # แก้ไขอัปเดต Embed หน้าเมนูหลักหลังจากเพิ่มเพลงสำเร็จ
         await update_main_menu_embed(interaction.message, guild)
 
 
@@ -241,7 +238,6 @@ class BotControlMenuView(discord.ui.View):
         self.guild = guild
         self.add_item(BotCommandControlSelect())
 
-    # --- แถวที่ 0: ปุ่มคุมการเข้าห้อง และปุ่มค้นหาเพลง (Music Engine Core) ---
     @discord.ui.button(label="📥 Join ห้องเสียง", style=discord.ButtonStyle.primary, emoji="🎙️", row=0)
     async def join_vc_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
         await interaction.response.defer()
@@ -258,7 +254,6 @@ class BotControlMenuView(discord.ui.View):
 
     @discord.ui.button(label="🔍 พิมพ์ชื่อเพลง (Play)", style=discord.ButtonStyle.success, emoji="🎵", row=0)
     async def search_play_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
-        # เด้งหน้าต่างกรอกข้อความ (Modal) ตามต้องการเลยงับ!
         await interaction.response.send_modal(MusicSearchModal())
 
     @discord.ui.button(label="⏭️ ข้ามเพลง (Skip)", style=discord.ButtonStyle.secondary, emoji="⏩", row=0)
@@ -271,7 +266,6 @@ class BotControlMenuView(discord.ui.View):
             await interaction.channel.send("⏭️ น้อน Doro สะบัดมือข้ามเพลงให้แล้วค๊าา!", delete_after=3)
         await update_main_menu_embed(interaction.message, self.guild)
 
-    # --- แถวที่ 1: ปุ่มหยุดเล่น และปุ่มปิดเมนู ---
     @discord.ui.button(label="⏹️ Stop & ล้างคิวเพลง", style=discord.ButtonStyle.danger, emoji="🛑", row=1)
     async def stop_music_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
         await interaction.response.defer()
@@ -304,7 +298,6 @@ def generate_main_menu_embed(guild):
         color=0x3498DB
     )
     
-    # ดึงสถานะเครื่องเล่นเพลงมาแสดงผลด้านบนสุดของแผงควบคุม
     if vc and vc.is_connected() and song:
         status_str = "🟢 กำลังบรรเลงเพลงอย่างเพลิดเพลิน" if not vc.is_paused() else "⏸️ พักเสียงเพลงชั่วคราว"
         embed.add_field(
@@ -324,18 +317,24 @@ def generate_main_menu_embed(guild):
             value="❌ ยังไม่ได้เปิดเพลง หรือน้อน Doro ยังไม่ได้เข้าห้องคุยเสียงค๊าา",
             inline=False
         )
-        embed.set_thumbnail(url=bot.user.avatar.url if bot.user.avatar else None)
+        # แก้ไขจุดเสี่ยง: เช็กว่ามีรูปโปรไฟล์บอทไหม ถ้าไม่มีให้ใช้ค่าว่างไปเลยกันโค้ดพังงับ
+        if bot.user and bot.user.avatar:
+            embed.set_thumbnail(url=bot.user.avatar.url)
         
     return embed
 
 async def update_main_menu_embed(message, guild):
     try:
-        await message.edit(embed=generate_main_menu_embed(guild), view=BotControlMenuView(guild))
-    except:
-        pass
+        if message:
+            await message.edit(embed=generate_main_menu_embed(guild), view=BotControlMenuView(guild))
+    except Exception as e:
+        logger.error(f"Error updating embed menu: {e}")
 
 async def return_to_main_menu(interaction: discord.Interaction):
-    await interaction.message.edit(embed=generate_main_menu_embed(interaction.guild), view=BotControlMenuView(interaction.guild))
+    try:
+        await interaction.message.edit(embed=generate_main_menu_embed(interaction.guild), view=BotControlMenuView(interaction.guild))
+    except Exception as e:
+        logger.error(f"Error returning to main menu: {e}")
 
 class BackToMainOnlyView(discord.ui.View):
     def __init__(self): 
@@ -649,13 +648,15 @@ class MultiRoleManagementView(discord.ui.View):
 # ==========================================
 @bot.event
 async def on_ready(): 
-    # ทำการลิงก์ระบายสีข้อมูลเพื่อให้หลังบ้านเปลี่ยนเพลงแล้วแผง UI หน้าแรกเปลี่ยนชื่อตามออโต้
     global refresh_main_menu_msg
     async def _refresh(guild_id, channel):
-        async for msg in channel.history(limit=20):
-            if msg.author.id == bot.user.id and msg.embeds and "All-in-One UI Mode" in str(msg.embeds[0].title):
-                await msg.edit(embed=generate_main_menu_embed(channel.guild), view=BotControlMenuView(channel.guild))
-                break
+        try:
+            async for msg in channel.history(limit=20):
+                if msg.author.id == bot.user.id and msg.embeds and "All-in-One UI Mode" in str(msg.embeds[0].title):
+                    await msg.edit(embed=generate_main_menu_embed(channel.guild), view=BotControlMenuView(channel.guild))
+                    break
+        except:
+            pass
     refresh_main_menu_msg = _refresh
     logger.info(f"Doro COMPLETELY SUPER POWERED IS RUNNING AS {bot.user}")
 
@@ -670,7 +671,6 @@ async def on_message(message: discord.Message):
         await message.channel.send(custom_responses[lower_msg])
         return
 
-    # 🎛️ เรียกแผงเมนูควบคุมหลัก (เพิ่มการรองรับคำสั่ง doro คำสั่งเพลง ให้เปิดหน้าเมนูรวมมิวสิคบอร์ดนี้เช่นกัน)
     if any(f"doro {k}" in lower_msg or f"doro{k}" in lower_msg for k in ["เมนู", "menu", "คำสั่งเพลง", "music"]):
         try: 
             await message.delete()
@@ -679,7 +679,6 @@ async def on_message(message: discord.Message):
         await message.channel.send(embed=generate_main_menu_embed(message.guild), view=BotControlMenuView(message.guild))
         return
 
-    # 🛡️ สั่งแจกยศด่วนแบบกลุ่ม
     if any(f"doro {k}" in lower_msg or f"doro{k}" in lower_msg for k in ["ให้ยศ", "addrole"]):
         if not message.author.guild_permissions.manage_roles: return
         try: 
@@ -689,7 +688,6 @@ async def on_message(message: discord.Message):
         await message.channel.send(embed=discord.Embed(title="🛡️ ระบบมอบยศกลุ่มอัจฉริยะ (UI High-Speed)", color=0x2ECC71), view=MultiRoleManagementView(message.guild))
         return
 
-    # 🧹 ลบข้อความขยะ
     if (f"doro ลบข้อความ" in lower_msg or f"doro clear" in lower_msg) and len(parts) >= 3:
         if not message.author.guild_permissions.manage_messages: return
         try: 
@@ -698,7 +696,6 @@ async def on_message(message: discord.Message):
             pass
         return
 
-    # 🎵 คำสั่งเปิดเพลงแบบพิมพ์ด่วนแบบเก่า (ยังคงเก็บไว้ให้ใช้ร่วมกันได้)
     if lower_msg.startswith("doro เล่น ") or lower_msg.startswith("doro play "):
         query = " ".join(parts[2:])
         if not query: 
@@ -741,7 +738,6 @@ async def on_message(message: discord.Message):
             source = discord.FFmpegPCMAudio(song_data['url'], **FFMPEG_OPTIONS)
             vc.play(source, after=lambda e: play_next_song(guild_id, vc, message.channel))
             
-            # เรียกเปิดแผงควบคุมอัจฉริยะให้แสดงผลทันทีหลังเพลงแรกเริ่มรัน
             await message.channel.send(embed=generate_main_menu_embed(message.guild), view=BotControlMenuView(message.guild))
 
 bot.run(DISCORD_TOKEN)
