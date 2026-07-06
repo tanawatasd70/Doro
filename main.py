@@ -547,7 +547,25 @@ class RobloxServerSelect(discord.ui.Select):
             view = discord.ui.View()
             view.add_item(discord.ui.Button(label="👉 กดที่นี่เพื่อเข้าเซิร์ฟ", url=game_data['url']))
             await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
-
+class DeleteRobloxServerModal(discord.ui.Modal, title="🗑️ ลบลิงก์เซิร์ฟเวอร์วี"):
+    def __init__(self):
+        super().__init__()
+        self.game_id = discord.ui.TextInput(label="พิมพ์รหัสเกมที่ต้องการลบ (เช่น blox_fruits)", required=True)
+        self.add_item(self.game_id)
+        
+    async def on_submit(self, interaction: discord.Interaction):
+        # แก้ไขอาการ "การโต้ตอบล้มเหลว" โดยใช้ defer และ followup
+        await interaction.response.defer(ephemeral=True)
+        g_id = self.game_id.value.strip().lower().replace(" ", "_")
+        current_data = load_roblox_data()
+        
+        if g_id in current_data:
+            deleted_name = current_data[g_id]['name']
+            del current_data[g_id]
+            save_roblox_data(current_data)
+            await interaction.followup.send(f"🗑️ ลบเกม **{deleted_name}** ออกจากคลังแสงเรียบร้อยค๊าา!", ephemeral=True)
+        else: 
+            await interaction.followup.send(f"❌ ไม่พบรหัสเกม '{g_id}' ในระบบค๊าา ลองเช็คตัวพิมพ์ดี ๆ น้าา", ephemeral=True)
 # 4. หน้าหลักระบบ Roblox
 class RobloxServerView(discord.ui.View):
     def __init__(self, guild):
