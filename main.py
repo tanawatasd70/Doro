@@ -283,13 +283,13 @@ class BotCommandControlSelect(discord.ui.Select):
         value = self.values[0]
         current_guild = interaction.guild
         
-        # 🏗️ กดปุ่มนี้ปุ๊บ เด้ง Modal ทันที
+        # 🏗️ โหมดสร้างห้องแชท
         if value == "setup_channels":
             await interaction.response.send_modal(MultiChannelModal())
             return
-            )
-            # ใช้ ChannelCategorySelectView เพื่อเลือกหมวดหมู่ก่อน
-            await interaction.message.edit(embed=embed, view=ChannelCategorySelectView(current_guild))
+
+        # สำหรับเมนูอื่นๆ
+        await interaction.response.defer()
         
         if value == "main_menu":
             embed = generate_main_menu_embed(current_guild)
