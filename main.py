@@ -275,8 +275,10 @@ class BotCommandControlSelect(discord.ui.Select):
 
     async def callback(self, interaction: discord.Interaction):
         # หากเลือกสร้างช่องแชท ให้เปิด Modal โดยไม่ต้อง edit ข้อความ
+        async def callback(self, interaction: discord.Interaction):
+        # แก้ไขตรงนี้ครับ:
         if self.values[0] == "setup_channels":
-            await interaction.response.send_modal(MultiChannelModal(interaction.guild))
+            await interaction.response.send_message("📂 กรุณาเลือกหมวดหมู่ที่ต้องการสร้างห้องก่อนนะค๊าา:", view=MultiChannelSetupView(interaction.guild), ephemeral=True)
             return
         
         await interaction.response.defer()
