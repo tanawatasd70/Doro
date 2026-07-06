@@ -274,9 +274,7 @@ class BotCommandControlSelect(discord.ui.Select):
         super().__init__(placeholder="🎛️ หรือเลือกโหมดทำงานอื่น ๆ ของน้อน Doro ที่นี่...", min_values=1, max_values=1, options=options, custom_id="doro_main_control_select", row=0)
 
     async def callback(self, interaction: discord.Interaction):
-        # หากเลือกสร้างช่องแชท ให้เปิด Modal โดยไม่ต้อง edit ข้อความ
-        async def callback(self, interaction: discord.Interaction):
-        # แก้ไขตรงนี้ครับ:
+        # หากเลือกสร้างช่องแชท ให้แสดง View เลือกหมวดหมู่ก่อน
         if self.values[0] == "setup_channels":
             await interaction.response.send_message("📂 กรุณาเลือกหมวดหมู่ที่ต้องการสร้างห้องก่อนนะค๊าา:", view=MultiChannelSetupView(interaction.guild), ephemeral=True)
             return
@@ -289,7 +287,6 @@ class BotCommandControlSelect(discord.ui.Select):
         if value == "setup_channels":
             await interaction.response.send_modal(MultiChannelModal())
             return
-
         # สำหรับเมนูอื่นๆ
         await interaction.response.defer()
         
