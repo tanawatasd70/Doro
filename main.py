@@ -179,87 +179,6 @@ class MusicSearchModal(discord.ui.Modal, title="🎵 ค้นหาและเ
         target_msg = self.current_msg if self.current_msg else interaction.message
         await update_music_menu_embed(target_msg, guild)
 
-# ==========================================
-# 🏗️ MODAL & UI สำหรับสร้างห้องแชทแบบจัดเต็ม
-# ==========================================
-
-class MultiChannelModal(discord.ui.Modal, title="🏗️ สร้างห้องแชทหลายห้องพร้อมกัน"):
-    def __init__(self, category=None):
-        super().__init__()
-        self.category = category
-        self.channel_names = discord.ui.TextInput(
-            label="ชื่อห้อง (คั่นด้วยเครื่องหมาย ,)",
-            placeholder="คุยเล่น, ฟังเพลง, ปาร์ตี้เกม",
-            style=discord.TextStyle.paragraph,
-            required=True
-        )
-        self.add_item(self.channel_names)
-
-    async def on_submit(self, interaction: discord.Interaction):
-        names = [n.strip() for n in self.channel_names.value.split(",") if n.strip()]
-        created_count = 0
-        
-        await interaction.response.defer(ephemeral=True)
-        
-        for name in names:
-            try:
-                await interaction.guild.create_text_channel(name, category=self.category)
-                created_count += 1
-            except:
-                continue
-        
-        await interaction.followup.send(f"✨ สร้างห้องให้แล้วทั้งหมด {created_count} ห้องในหมวด **{self.category.name if self.category else 'ทั่วไป'}** เรียบร้อยค๊าา! 🎀", ephemeral=True)
-
-class MultiChannelSetupView(discord.ui.View):
-    def __init__(self, guild):
-        super().__init__(timeout=None)
-        self.guild = guild
-        
-        # Dropdown เลือกหมวดหมู่
-        self.category_select = discord.ui.ChannelSelect(
-            channel_types=[discord.ChannelType.category],
-            placeholder="📂 เลือกหมวดหมู่ที่อยากให้ห้องไปอยู่...",
-            min_values=1, max_values=1
-        )
-        self.category_select.callback = self.select_category
-        self.add_item(self.category_select)
-
-    async def select_category(self, interaction: discord.Interaction):
-        # 1. ดึง ID ของหมวดหมู่ที่เลือกออกมา
-        category_id = int(self.category_select.values[0])
-        
-        # 2. ใช้ guild.get_channel เพื่อดึง object ของหมวดหมู่นั้นๆ
-        cat_obj = self.guild.get_channel(category_id)
-        
-        if cat_obj:
-            # 3. เปิด Modal สำหรับกรอกชื่อห้องโดยส่ง cat_obj ไปด้วย
-            await interaction.response.send_modal(MultiChannelInputModal(cat_obj))
-        else:
-            await interaction.response.send_message("❌ ไม่พบหมวดหมู่นี้ในเซิร์ฟเวอร์ค๊าา", ephemeral=True)
-
-class MultiChannelInputModal(discord.ui.Modal, title="🏗️ ระบุชื่อห้อง (คั่นด้วย ,)"):
-    def __init__(self, category):
-        super().__init__()
-        self.category = category
-        self.channel_names = discord.ui.TextInput(
-            label="ชื่อห้องแชท",
-            placeholder="ห้อง 1, ห้อง 2, ห้อง 3",
-            style=discord.TextStyle.paragraph,
-            required=True
-        )
-        self.add_item(self.channel_names)
-
-    async def on_submit(self, interaction: discord.Interaction):
-        names = [n.strip() for n in self.channel_names.value.split(",") if n.strip()]
-        await interaction.response.defer(ephemeral=True)
-        
-        count = 0
-        for name in names:
-            try:
-                await interaction.guild.create_text_channel(name, category=self.category)
-                count += 1
-            except: continue
-        await interaction.followup.send(f"✅ สร้างให้แล้ว {count} ห้อง ในหมวดหมู่ **{self.category.name}** ค๊าา!", ephemeral=True)
 
 # ==========================================
 # 🎛️ MAIN UI COMMAND MENU 
@@ -273,30 +192,16 @@ class BotCommandControlSelect(discord.ui.Select):
             discord.SelectOption(label="🛡️ เปิดระบบจัดการ/ขอยศ", description="เรียกเมนู Dropdown เลือกรับยศ และปุ่มขอยศสุดน่ารัก", value="setup_roles"),
             discord.SelectOption(label="📊 เปิดระบบสร้างคำถามโพล", description="สร้างโพลน่ารัก ๆ เพื่อโหวตเลือกคำตอบกันเถอะ", value="setup_poll"),
             discord.SelectOption(label="🎮 รวมลิงก์ Private Server Roblox", description="คลังแสงลิงก์เซิร์ฟเวอร์วีเกมต่าง ๆ ของชาว Robloxค๊าา", value="roblox_servers"),
-            discord.SelectOption(label="🏗️ สร้างห้องแชทหลายห้อง", description="สร้างช่องแชทจำนวนมากในครั้งเดียวค๊าา", value="setup_channels"),
             discord.SelectOption(label="🚫 เริ่มวาระโหวตเตะสมาชิก", description="เลือกคนที่ทำตัวไม่น่ารักเพื่อเริ่มโหวตเตะกันค่ะ!", value="setup_kick"),
             discord.SelectOption(label="📖 ดูคู่มือคำสั่งบอททั้งหมด", description="มาดูคู่มือการสั่งงานและบันทึกความสามารถน้อน Doro กันงับ", value="show_commands")
         ]
         super().__init__(placeholder="🎛️ หรือเลือกโหมดทำงานอื่น ๆ ของน้อน Doro ที่นี่...", min_values=1, max_values=1, options=options, custom_id="doro_main_control_select", row=0)
 
     async def callback(self, interaction: discord.Interaction):
+        await interaction.response.defer()
         value = self.values[0]
-        
-        # แก้ไขจุดนี้: ถ้าเลือกสร้างห้อง ให้ส่ง View เลือกหมวดหมู่
-        if value == "setup_channels":
-            await interaction.response.send_message("📂 กรุณาเลือกหมวดหมู่ที่ต้องการสร้างห้องก่อนนะค๊าา:", view=MultiChannelSetupView(interaction.guild), ephemeral=True)
-            return
-        
-        await interaction.response.defer()
         current_guild = interaction.guild
-        
-        # 🏗️ โหมดสร้างห้องแชท
-        if value == "setup_channels":
-            await interaction.response.send_modal(MultiChannelModal())
-            return
-        # สำหรับเมนูอื่นๆ
-        await interaction.response.defer()
-        
+
         if value == "main_menu":
             embed = generate_main_menu_embed(current_guild)
             await interaction.message.edit(embed=embed, view=BotControlMenuView(current_guild))
@@ -318,19 +223,15 @@ class BotCommandControlSelect(discord.ui.Select):
         elif value == "setup_roles":
             embed = discord.Embed(title="🛡️ ระบบจัดการยศอัตโนมัติค๊าา", description="คุณชอบยศไหนเลือกรับจากเมนูด้านล่างนี้ได้เลยนะค๊าา หรือจะกดปุ่มขอยศพิเศษพร้อมส่งเหตุผลอ้อน ๆ มาให้แอดมินดูก็ได้น้าา~ ✨", color=0xFFB6C1)
             await interaction.message.edit(embed=embed, view=RequestRoleView(current_guild))
-            
         elif value == "setup_poll":
             embed = discord.Embed(title="📊 ระบบสร้างคำถามโพลระดมความคิดค๊าา", description="กรุณากรอกหัวข้อคำถาม และเลือกช่องทางปล่อยโพลให้ครบถ้วนด้านล่างนี้เลยน้าา~ ✨", color=0x9B59B6)
             await interaction.message.edit(embed=embed, view=AskQuestionView(current_guild))
-            
         elif value == "roblox_servers":
             embed = discord.Embed(title="🎮 คลังแสง Private Server ของแก๊งเรา! 🚀", description="อยากไปฟาร์ม ไปเวล หรือไปตึงเกมไหน เลือกชื่อเกมจากเมนูด้านล่างนี้ได้เลยค๊าา\n(สำหรับแอดมินสามารถกดปุ่มเพื่อเพิ่มหรือลบเกมได้เลยนะค๊าา) ✨", color=0x00E5FF)
             await interaction.message.edit(embed=embed, view=RobloxServerView(current_guild))
-            
         elif value == "setup_kick":
             embed = discord.Embed(title="🚫 ระบบโหวตเตะสมาชิก (โหมด Doro เอาจริง!)", description="โปรดเลือกรายชื่อคนที่ไม่น่ารักที่คุณต้องการเริ่มโหวตลงมติเตะด้านล่างนี้ได้เลยค่ะงึมมม", color=discord.Color.red())
             await interaction.message.edit(embed=embed, view=MemberSelectView(current_guild))
-            
         elif value == "show_commands":
             embed = discord.Embed(
                 title="📘 สมุดคู่มือและบันทึกความสามารถของน้อน Doro 🤖✨",
@@ -343,7 +244,6 @@ class BotCommandControlSelect(discord.ui.Select):
                     "* **🛡️ ระบบแจกและขอยศสุดตึง**: เลือกรับยศเอง หรือส่งคำขออ้อน ๆ มาขอยศพิเศษก็ได้น้าา\n"
                     "* **📊 โพลระดมความคิด**: สร้างคำถามและส่งไปห้องที่ต้องการ พร้อมระบบนับคะแนนเรียลไทม์\n"
                     "* **🎮 คลังแสงเซิร์ฟ Roblox**: รวมลิงก์ตั๋วเข้า Private Server เกมโปรดของแก๊งเราไว้ที่เดียว\n"
-                    "* **🏗️ สร้างห้องแชทหลายห้อง**: สั่งหนูสร้างห้องแชทใหม่พร้อมกันหลายห้องได้ในคลิกเดียว\n"
                     "* **🚫 ศาลเตี้ยโหวตเตะ**: เปิดวาระโหวตลงมติเพื่อดีดออกจากห้องเสียงหรือเซิร์ฟเวอร์\n\n"
                     "--------------------------------------------------\n"
                     "**✍️ สรุปคำสั่งพิมพ์ด่วน (Quick Commands):**\n"
@@ -531,10 +431,11 @@ class ClearChannelView(discord.ui.View):
     async def clear_custom(self, interaction: discord.Interaction, btn):
         await interaction.response.send_modal(CustomClearModal())
 
+    # 💥 ปุ่มวิเศษสำหรับรีเซ็ตล้างระดานแชลเนลแบบ 100% (Nuke Channel) 
     @discord.ui.button(label="🚨 รีเซ็ตห้องแชท (Nuke Channel)", style=discord.ButtonStyle.danger, emoji="💥", row=1)
     async def nuke_channel_btn(self, interaction: discord.Interaction, btn):
         if not interaction.user.guild_permissions.manage_channels:
-            return await interaction.response.send_message("❌ คุณพี่ต้องมีสิทธิ์...", ephemeral=True)
+            return await interaction.response.send_message("❌ คุณพี่ต้องมีสิทธิ์ 'จัดการช่องแชลเนล' (Manage Channels) ถึงจะสั่งระเบิดห้องแชทได้นะค๊าางึมมม", ephemeral=True)
         
         await interaction.response.defer()
         current_channel = interaction.channel
