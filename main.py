@@ -184,7 +184,7 @@ class RoleSetupAdminView(discord.ui.View):
         )
         
         # 🐱 ใส่โลโก้รูปแมวดำอ้วนกลมจากไฟล์ภาพของพี่ (ดึงผ่าน URL ตัวแทนแบบยั่งยืน)
-        embed.set_thumbnail(url="https://images.unsplash.com/photo-1514888286974-6c03e2ca1dba?q=80&w=500") 
+        embed.set_thumbnail(url="https://i.ytimg.com/vi/jrhV4oltZd0/maxresdefault.jpg") 
         embed.set_image(url=random.choice(self.group_images)) # ภาพแบนเนอร์ใหญ่ตรงกลาง
 
         # ปล่อยกล่องรับยศตัวจริงลงห้องแชท
