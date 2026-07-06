@@ -106,21 +106,18 @@ class DynamicGroupJoinView(discord.ui.View):
         self.add_item(btn)
 
     async def button_callback(self, interaction: discord.Interaction):
-        # 🤫 บังคับให้เป็น Ephemeral Mode (ข้อความเด้งแล้วหายไปเอง เห็นคนเดียว)
         await interaction.response.defer(ephemeral=True)
         role = interaction.guild.get_role(self.role_id)
         if not role:
             return await interaction.followup.send("❌ งื้อออ น้อนหาตัวยศนี้ในเซิร์ฟไม่เจอ แอดมินลบยศไปหรือเปล่านะ?", ephemeral=True)
 
         if role in interaction.user.roles:
-            # 🔄 ระบบ 2-in-1: ถ้ามียศอยู่แล้ว กดอีกทีจะเป็นการคืนยศชั่วคราว
             try:
                 await interaction.user.remove_roles(role)
                 return await interaction.followup.send(f"🏃‍♂️ ถอนยศ **{role.name}** และออกจากกลุ่มเรียบร้อยค๊าา ไว้แวะมาใหม่น้าา", ephemeral=True)
             except discord.Forbidden:
                 return await interaction.followup.send("❌ น้อนไม่มีสิทธิ์ถอนยศนี้ค๊าา", ephemeral=True)
 
-        # 👑 จังหวะกดรับยศสำเร็จ -> ข้อความแมวทมิฬจะขึ้นมาแล้วหายไปเองตามที่พี่ต้องการเยย!
         try:
             await interaction.user.add_roles(role)
             await interaction.followup.send("🎉 ยินดีต้อนรับเข้าสู่กลุ่มค๊าา! มอบยศ M͟͞E͟͞M͟͞B͟͞E͟͞R͟͞ ให้เรียบร้อย ตอนนี้ห้องลับเปิดให้เข้าแล้วน้าา~ 💕", ephemeral=True)
@@ -135,7 +132,6 @@ class RoleSetupAdminView(discord.ui.View):
         self.selected_role_id = None
         self.selected_emoji = "🌸" # Default เริ่มต้น
 
-        # แบนเนอร์แมวดำเท่ ๆ สไตล์อนิเมะ
         self.group_images = [
             "https://images.alphacoders.com/133/1330962.png",
             "https://images.alphacoders.com/112/1123447.jpg"
@@ -176,21 +172,16 @@ class RoleSetupAdminView(discord.ui.View):
         await interaction.response.defer()
         role = self.guild.get_role(self.selected_role_id)
         
-        # 🖤 สร้างแผง Embed ตามรูปภาพ โครงสร้างเดิม แต่เปลี่ยนชื่อกลุ่มและสี UI เป็นสีดำ!
         embed = discord.Embed(
             title="ยินดีต้อนรับค๊าาา", 
             description=f"### ดิฉันดีใจมากที่ท่านเข้ามา 😉\n### โปรดกดอิโมจิอันนี้ {self.selected_emoji} ด้วยค่ะ เพื่อยืนยันตัวตนนะคะ🫠\n\n**แมวทมิฬ FAMILY 🐈‍⬛🖤**!",
-            color=0xFFB6C1 # 🎨 ปรับแถบด้านข้างของ UI เป็นสีดำสนิทตามที่ขอค๊าา
+            color=0xFFB6C1 
         )
         
-        # 🐱 ใส่โลโก้รูปแมวดำอ้วนกลมจากไฟล์ภาพของพี่ (ดึงผ่าน URL ตัวแทนแบบยั่งยืน)
         embed.set_thumbnail(url="https://i.ytimg.com/vi/jrhV4oltZd0/maxresdefault.jpg") 
-        embed.set_image(url=random.choice(self.group_images)) # ภาพแบนเนอร์ใหญ่ตรงกลาง
+        embed.set_image(url=random.choice(self.group_images)) 
 
-        # ปล่อยกล่องรับยศตัวจริงลงห้องแชท
         await interaction.channel.send(embed=embed, view=DynamicGroupJoinView(self.selected_role_id, self.selected_emoji))
-        
-        # ลบแผงควบคุมของแอดมินทิ้งเพื่อความสะอาด
         await interaction.delete_original_response()
 
 
@@ -258,7 +249,7 @@ class MusicSearchModal(discord.ui.Modal, title="🎵 ค้นหาและเ
             await interaction.channel.send("❌ คุณพี่ต้องเข้ามาอยู่ในห้องคุยเสียงก่อนสั่งหนูเปิดเพลงนะค๊าางึมมม", delete_after=5)
             return
 
-        status_msg = await interaction.channel.send(f"🔍 น้อน Doro กำลังดำน้ำไปงมหาเพลง **'{query}'** บน YouTube แป๊บน้าน้าา...", delete_after=5)
+        await interaction.channel.send(f"🔍 น้อน Doro กำลังดำน้ำไปงมหาเพลง **'{query}'** บน YouTube แป๊บน้าน้าา...", delete_after=5)
         
         with yt_dlp.YoutubeDL(YTDL_OPTIONS) as ytdl:
             try:
@@ -394,7 +385,7 @@ def generate_main_menu_embed(guild):
     vc = guild.voice_client
 
     embed = discord.Embed(
-        title="⚙️ Doro แผงควบคุมระบบอัจฉริยะสุดน่ารัก ❤️‍🔥 ", 
+        title="⚙️ Doro แผงควบคุมระบบอัจฉริยะสุดน่ารัก ❤️‍🔥", 
         description="ยินดีต้อนรับค๊าา! ตอนนี้ปุ่มควบคุมเพลงถูกย้ายเข้าไปอยู่ในหัวข้อ แถบด้านล่าง นายสามารถเลือกโหมดใช้งานเราได้เลยน้าา ✨", 
         color=0xFFB6C1
     )
@@ -545,7 +536,7 @@ class ClearChannelView(discord.ui.View):
     async def clear_50(self, interaction: discord.Interaction, btn):
         await self.do_purge(interaction, 50)
 
-    @discord.ui.button(label="✍️ 定หนดจำนวนเอง", style=discord.ButtonStyle.primary, row=0)
+    @discord.ui.button(label="✍️ กำหนดจำนวนเอง", style=discord.ButtonStyle.primary, row=0)
     async def clear_custom(self, interaction: discord.Interaction, btn):
         await interaction.response.send_modal(CustomClearModal())
 
@@ -830,7 +821,7 @@ class VoteKickTypeView(discord.ui.View):
         self.target = target
         self.req = req_votes
         self.guild = guild
-    
+        
     @discord.ui.button(label="🔊 เตะออกจากห้องเสียง", style=discord.ButtonStyle.primary)
     async def vc_kick(self, interaction: discord.Interaction, btn):
         await interaction.response.defer()
@@ -840,7 +831,7 @@ class VoteKickTypeView(discord.ui.View):
     async def server_kick(self, interaction: discord.Interaction, btn):
         await interaction.response.defer()
         await interaction.message.edit(embed=discord.Embed(title="🚨 เริ่มโหวตเตะออกจากเซิร์ฟเวอร์!"), view=VoteProgressView(self.target, "server", self.req, self.guild))
-    
+        
     @discord.ui.button(label="🔙 ย้อนกลับหน้าแรก", style=discord.ButtonStyle.secondary, emoji="⬅️", row=1)
     async def back(self, interaction: discord.Interaction, btn): 
         await interaction.message.edit(embed=generate_main_menu_embed(self.guild), view=BotControlMenuView(self.guild))
@@ -926,16 +917,14 @@ async def on_ready():
     async def _refresh(guild_id, channel):
         try:
             async for msg in channel.history(limit=20):
-                if msg.author.id == bot.user.id and msg.embeds and "All-in-One UI Mode" in str(msg.embeds[0].title):
+                if msg.author.id == bot.user.id and msg.embeds and "Doro แผงควบคุมระบบอัจฉริยะสุดน่ารัก" in str(msg.embeds[0].title):
                     await msg.edit(embed=generate_main_menu_embed(channel.guild), view=BotControlMenuView(channel.guild))
                     break
         except:
             pass
     refresh_main_menu_msg = _refresh
     
-    # ลงทะเบียนสิทธิ์ปุ่มรับยศแบบ Dynamic เผื่อกรณีบอทรีบูตตัวใหม่ค๊าา
     bot.add_view(DynamicGroupJoinView(role_id=0, emoji_str="🌸"))
-    
     logger.info(f"Doro COMPLETELY SUPER POWERED IS RUNNING AS {bot.user}")
 
 @bot.event
@@ -978,11 +967,10 @@ async def on_message(message: discord.Message):
     if lower_msg == "doro สร้างปุ่มรับยศ":
         if not message.author.guild_permissions.manage_roles: return
         try:
-            await message.delete() # ลบข้อความทันทีค๊าา!
+            await message.delete() 
         except:
             pass
             
-        # แผงเบื้องหลังแอดมินตั้งค่าแบบ Ephemeral ลบอัตโนมัติภายใน 60 วินาที
         admin_setup_embed = discord.Embed(
             title="🛠️ แผงควบคุมตั้งค่ากล่องรับยศเข้ากลุ่ม (แอดมินโหมด)",
             description="กรุณาเลือกยศที่ต้องการแจกและหน้าตาปุ่มอิโมจิด้านล่างให้ครบถ้วน จากนั้นกดปุ่มยืนยันเพื่อเสกกล่องแมวทมิฬสีดำลงช่องแชทค๊าา! ✨",
