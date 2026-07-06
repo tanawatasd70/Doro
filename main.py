@@ -527,11 +527,10 @@ class ClearChannelView(discord.ui.View):
     async def clear_custom(self, interaction: discord.Interaction, btn):
         await interaction.response.send_modal(CustomClearModal())
 
-    # 💥 ปุ่มวิเศษสำหรับรีเซ็ตล้างระดานแชลเนลแบบ 100% (Nuke Channel) 
     @discord.ui.button(label="🚨 รีเซ็ตห้องแชท (Nuke Channel)", style=discord.ButtonStyle.danger, emoji="💥", row=1)
     async def nuke_channel_btn(self, interaction: discord.Interaction, btn):
         if not interaction.user.guild_permissions.manage_channels:
-            return await interaction.response.send_message("❌ คุณพี่ต้องมีสิทธิ์ 'จัดการช่องแชลเนล' (Manage Channels) ถึงจะสั่งระเบิดห้องแชทได้นะค๊าางึมมม", ephemeral=True)
+            return await interaction.response.send_message("❌ คุณพี่ต้องมีสิทธิ์...", ephemeral=True)
         
         await interaction.response.defer()
         current_channel = interaction.channel
