@@ -60,7 +60,8 @@ def load_roblox_data():
             return json.load(f)
     except FileNotFoundError:
         default_data = {
-            
+            "blox_fruits": {"name": "🏴‍☠️ Blox Fruits", "url": "https://www.roblox.com/"},
+            "king_legacy": {"name": "👑 King Legacy", "url": "https://www.roblox.com/"}
         }
         save_roblox_data(default_data)
         return default_data
@@ -71,7 +72,7 @@ def save_roblox_data(data):
 
 
 # ==========================================
-# 🎛️ MAIN UI COMMAND MENU (ลบตัวเองเมื่อกดยืนยัน)
+# 🎛️ MAIN UI COMMAND MENU 
 # ==========================================
 class BotCommandControlSelect(discord.ui.Select):
     def __init__(self):
@@ -94,7 +95,6 @@ class BotCommandControlSelect(discord.ui.Select):
         value = self.values[0]
         current_guild = interaction.guild
         
-        # 🔥 ลบแผงควบคุมหลักอันบนสุดทิ้งทันที! (แก้ปัญหารูปรกแชท)
         try:
             await interaction.message.delete()
         except Exception:
@@ -152,6 +152,13 @@ class BotControlMenuView(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=None)
         self.add_item(BotCommandControlSelect())
+
+    @discord.ui.button(label="ยกเลิก / ปิดเมนู", style=discord.ButtonStyle.danger, emoji="🔴", custom_id="doro_main_cancel_btn", row=1)
+    async def cancel_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        try:
+            await interaction.message.delete()
+        except Exception:
+            pass
 
 
 # ==========================================
@@ -218,16 +225,25 @@ class RobloxServerView(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=None)
         self.add_item(RobloxServerSelect())
+        
     @discord.ui.button(label="➕ เพิ่มเกม", style=discord.ButtonStyle.primary, custom_id="roblox_add_btn")
     async def add_server_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         await interaction.response.send_modal(AddRobloxServerModal())
+        
     @discord.ui.button(label="🗑️ ลบเกม", style=discord.ButtonStyle.danger, custom_id="roblox_del_btn")
     async def delete_server_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         await interaction.response.send_modal(DeleteRobloxServerModal())
 
+    @discord.ui.button(label="ปิดเมนู", style=discord.ButtonStyle.secondary, emoji="🔴", custom_id="roblox_cancel_btn")
+    async def cancel_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        try:
+            await interaction.message.delete()
+        except Exception:
+            pass
+
 
 # ==========================================
-# 🛡️ ROLE SYSTEM (ลบแผงรับยศทันทีหลังเลือกเสร็จ)
+# 🛡️ ROLE SYSTEM 
 # ==========================================
 class RoleSelect(discord.ui.Select):
     def __init__(self, guild):
@@ -239,7 +255,6 @@ class RoleSelect(discord.ui.Select):
         role = interaction.guild.get_role(int(self.values[0]))
         if role is None: return
 
-        # 🔥 ลบแผงรับยศทิ้งทันที
         try:
             await interaction.message.delete()
         except Exception:
@@ -296,6 +311,13 @@ class RequestRoleView(discord.ui.View):
         self.add_item(RoleSelect(guild))
         self.add_item(TextInputButton())
         self.add_item(RemoveRolesButton())
+
+    @discord.ui.button(label="ยกเลิก / ปิดเมนู", style=discord.ButtonStyle.secondary, emoji="🔴", custom_id="role_cancel_btn", row=2)
+    async def cancel_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        try:
+            await interaction.message.delete()
+        except Exception:
+            pass
 
 
 # ==========================================
@@ -364,6 +386,19 @@ class VoteSelect(discord.ui.Select):
                 poll_result_messages[poll_msg_id] = new_res_msg.id
         await interaction2.response.send_message("✅ บันทึกคะแนนเสียงแล้วค่ะ!", ephemeral=True, delete_after=2)
 
+# ปุ่มพิเศษสำหรับลบโพลสาธารณะ (สิทธิ์เฉพาะแอดมิน)
+class DeletePublicPollButton(discord.ui.Button):
+    def __init__(self):
+        super().__init__(label="ลบโพลนี้ทิ้ง (แอดมิน)", style=discord.ButtonStyle.danger, emoji="🗑️", custom_id="poll_delete_public_btn")
+    async def callback(self, interaction: discord.Interaction):
+        if interaction.user.guild_permissions.manage_messages:
+            try:
+                await interaction.message.delete()
+            except Exception:
+                pass
+        else:
+            await interaction.response.send_message("❌ สิทธิ์ไม่พอสำหรับลบโพลค๊าา", ephemeral=True)
+
 class AskQuestionView(discord.ui.View):
     def __init__(self, guild):
         super().__init__(timeout=None)
@@ -387,6 +422,13 @@ class AskQuestionView(discord.ui.View):
         self.add_item(OpenQuestionModalButton(self))
         self.add_item(SubmitQuestionButton(self))
 
+    @discord.ui.button(label="ยกเลิกการสร้าง", style=discord.ButtonStyle.danger, emoji="🔴", custom_id="poll_cancel_btn", row=3)
+    async def cancel_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        try:
+            await interaction.message.delete()
+        except Exception:
+            pass
+
     async def on_select_target_channel(self, interaction: discord.Interaction):
         self.target_channel_id = int(self.select_question_channel.values[0])
         await interaction.response.defer()  
@@ -402,13 +444,15 @@ class AskQuestionView(discord.ui.View):
             embed = discord.Embed(title=f"❓ โพล: {self.question_text}", color=discord.Color.pink())
             vote_view = discord.ui.View(timeout=None)
             vote_view.add_item(VoteSelect(self.poll_choices, self.result_channel_id, self.poll_choices))
+            vote_view.add_item(DeletePublicPollButton()) # เพิ่มปุ่มลบโพลลงไป
+            
             sent_msg = await q_channel.send(embed=embed, view=vote_view)
             vote_records[sent_msg.id] = {}
             await interaction.response.send_message("✅ ปล่อยโพลเรียบร้อย!", ephemeral=True)
 
 
 # ==========================================
-# 🚫 VOTE KICK SYSTEM (ลบเมนูเมื่อทำรายการเสร็จ)
+# 🚫 VOTE KICK SYSTEM 
 # ==========================================
 class MemberSelect(discord.ui.UserSelect):
     def __init__(self, guild):
@@ -416,18 +460,16 @@ class MemberSelect(discord.ui.UserSelect):
         self.guild = guild
 
     async def callback(self, interaction: discord.Interaction):
-        # 🌟 เพิ่มบรรทัดนี้เพื่อยอมรับการโต้ตอบ (Acknowledge Interaction) ทันทีป้องกันการล้มเหลว
+        # 🌟 แก้บั๊ก Interaction Failed โดยการ Defer ทันที
         await interaction.response.defer()
 
         target_member = self.values[0]
         if target_member.id == interaction.user.id or target_member.bot:
-            # เปลี่ยนเป็นส่งตามช่องแชทปกติ หรือใช้ followups เนื่องจากใช้ defer ไปแล้ว
             return await interaction.followup.send("❌ เลือกโหวตเตะคนนี้ไม่ได้ค๊าา!", ephemeral=True)
 
         member_obj = interaction.guild.get_member(target_member.id)
         if not member_obj: return
 
-        # 🔥 ลบแผงเลือกรายชื่อทันที
         try:
             await interaction.message.delete()
         except Exception:
@@ -448,6 +490,13 @@ class MemberSelectView(discord.ui.View):
     def __init__(self, guild):
         super().__init__(timeout=60)
         self.add_item(MemberSelect(guild))
+
+    @discord.ui.button(label="ยกเลิก", style=discord.ButtonStyle.secondary, emoji="🔴", custom_id="kick_select_cancel_btn")
+    async def cancel_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        try:
+            await interaction.message.delete()
+        except Exception:
+            pass
 
 class KickTypeButton(discord.ui.Button):
     def __init__(self, target: discord.Member, kick_type: str, required_votes: int):
@@ -478,6 +527,13 @@ class VoteKickTypeView(discord.ui.View):
         super().__init__(timeout=60)
         self.add_item(KickTypeButton(target, "voice", required_votes))
         self.add_item(KickTypeButton(target, "server", required_votes))
+
+    @discord.ui.button(label="ยกเลิก", style=discord.ButtonStyle.secondary, emoji="🔴", custom_id="kick_type_cancel_btn")
+    async def cancel_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        try:
+            await interaction.message.delete()
+        except Exception:
+            pass
 
 class VoteProgressView(discord.ui.View):
     def __init__(self, target: discord.Member, kick_type: str, required_votes: int):
@@ -519,9 +575,20 @@ class VoteProgressView(discord.ui.View):
         else:
             await interaction.response.edit_message(embed=embed, view=self)
 
+    @discord.ui.button(label="ยกเลิกโหวตนี้ (แอดมิน)", style=discord.ButtonStyle.danger, emoji="🔴", custom_id="kick_vote_cancel_btn")
+    async def cancel_vote_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if interaction.user.guild_permissions.kick_members:
+            try:
+                await interaction.message.delete()
+                self.stop()
+            except Exception:
+                pass
+        else:
+            await interaction.response.send_message("❌ เฉพาะผู้ดูแลระบบที่มีสิทธิ์เตะสมาชิกเท่านั้นที่ยกเลิกวาระได้ค๊าา", ephemeral=True)
+
 
 # ==========================================
-# ⚙️ SYSTEM CORE & EVENTS (ส่วนท้ายที่สมบูรณ์)
+# ⚙️ SYSTEM CORE & EVENTS
 # ==========================================
 @bot.event
 async def on_ready():
@@ -540,7 +607,7 @@ async def on_message(message: discord.Message):
             await message.channel.send(custom_responses[lower_msg])
             return
 
-        # 📌 เปิดแผงควบคุมหลัก (พร้อมลบคำสั่งตัวหนังสือเพื่อความคลีน)
+        # 📌 เปิดแผงควบคุมหลัก
         is_menu_cmd = False
         for keyword in ["เมนู", "เมณู", "เเมนู", "menu", "munu", "menuu"]:
             if f"doro {keyword}" in lower_msg or f"doro{keyword}" in lower_msg:
@@ -650,20 +717,21 @@ async def on_message(message: discord.Message):
                 break
         if is_reset_cmd:
             if not message.author.guild_permissions.manage_channels: return
-            chan = message.channel
-            pos = chan.position
-            await chan.send("🌀 น้อน Doro กำลังเปิดประตูมิติม้วนเวลาชุบชีวิตห้องแชทนี้ใหม่ใน 3 วินาที...")
-            await asyncio.sleep(3)
             try:
-                new_chan = await chan.clone(reason="Doro Reset Room")
-                await chan.delete()
-                await new_chan.edit(position=pos)
-                await new_chan.send("✨ **พริ๊งงง~! ห้องแชทนี้ถูกชุบชีวิตใหม่เอี่ยมอ่องเรียบร้อยแล้วค่ะ!** 🌸", delete_after=3)
+                current_channel = message.channel
+                position = current_channel.position
+                await current_channel.send("⏳ กำลังรีเซ็ตห้องแชทใหม่ใน 3 วินาทีค๊าา...")
+                await asyncio.sleep(3)
+                new_channel = await current_channel.clone(reason="Doro รีเซ็ตห้องแชทใหม่ค๊าา")
+                await current_channel.delete()
+                await new_channel.edit(position=position)
+                await new_channel.send("✨ ชุบชีวิตห้องแชทใหม่เรียบร้อยแล้วค๊าา! สะอาดวิ้งงง~")
             except Exception: pass
             return
 
     except Exception as e:
-        logger.error(f"Error: {e}")
+        logger.error(f"Error logic processing: {e}")
 
+# เปิดระบบหลังบ้านออนไลน์รันบอท
 server_on()
 bot.run(DISCORD_TOKEN)
