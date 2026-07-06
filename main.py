@@ -176,20 +176,19 @@ class MusicSearchModal(discord.ui.Modal, title="🎵 ค้นหาและเ
             source = discord.FFmpegPCMAudio(song_data['url'], **FFMPEG_OPTIONS)
             vc.play(source, after=lambda e: play_next_song(guild_id, vc, interaction.channel))
 
-        # อัปเดต Embed หน้าปัจจุบัน
         target_msg = self.current_msg if self.current_msg else interaction.message
         await update_music_menu_embed(target_msg, guild)
 
 
 # ==========================================
-# 🎛️ MAIN UI COMMAND MENU (เมนูหลักสะอาดสะอ้าน ย้ายปุ่มเพลงเข้า Dropdown แล้ว)
+# 🎛️ MAIN UI COMMAND MENU 
 # ==========================================
 class BotCommandControlSelect(discord.ui.Select):
     def __init__(self):
         options = [
             discord.SelectOption(label="🏠 หน้าแรก / เคลียร์เมนูย่อย", description="กลับสู่หน้าจอเริ่มต้น ล้างหน้าต่างการทำงานด้านล่าง", value="main_menu"),
             discord.SelectOption(label="🎵 เปิดระบบควบคุมและเล่นเพลง", description="เข้าสู่หน้าต่างควบคุมมิวสิคบอร์ด เปิดเพลง/เลือกเพลงค๊าา", value="setup_music"),
-            discord.SelectOption(label="🧹 เปิดระบบล้างข้อความแชท", description="ลบข้อความขยะ/เคลียร์หน้าแชทในช่องนี้อย่างรวดเร็ว", value="setup_clear"),
+            discord.SelectOption(label="🧹 เปิดระบบล้างข้อความแชท", description="ลบข้อความขยะ/รีเซ็ตล้างห้องแชทให้เกลี้ยงในพริบตา", value="setup_clear"),
             discord.SelectOption(label="🛡️ เปิดระบบจัดการ/ขอยศ", description="เรียกเมนู Dropdown เลือกรับยศ และปุ่มขอยศสุดน่ารัก", value="setup_roles"),
             discord.SelectOption(label="📊 เปิดระบบสร้างคำถามโพล", description="สร้างโพลน่ารัก ๆ เพื่อโหวตเลือกคำตอบกันเถอะ", value="setup_poll"),
             discord.SelectOption(label="🎮 รวมลิงก์ Private Server Roblox", description="คลังแสงลิงก์เซิร์ฟเวอร์วีเกมต่าง ๆ ของชาว Robloxค๊าา", value="roblox_servers"),
@@ -212,7 +211,13 @@ class BotCommandControlSelect(discord.ui.Select):
             await interaction.message.edit(embed=embed, view=MusicControlView(current_guild))
 
         elif value == "setup_clear":
-            embed = discord.Embed(title="🧹 ระบบจัดการและล้างข้อความในช่องแชท", description="คุณพี่ต้องการให้น้อน Doro กวาดล้างข้อความขยะในช่องนี้จำนวนเท่าไหร่ เลือกกดปุ่มด้านล่างได้เลยนะค๊าา!\n*(ระบบต้องการสิทธิ์จัดการข้อความ)*", color=0x34495E)
+            embed = discord.Embed(
+                title="🧹 ระบบจัดการและล้างข้อความในช่องแชท", 
+                description="คุณพี่ต้องการให้น้อน Doro จัดการช่องแชทนี้อย่างไรดีค๊าา?\n\n"
+                            "🔹 **ลบตามจำนวนล่าสุด**: กวาดล้างข้อความเก่าออกตามจำนวนที่เลือก\n"
+                            "⚠️ **รีเซ็ตห้องแชท (Nuke)**: ทำการโคลนและลบห้องเดิมทิ้งทันที เพื่อล้างประวัติแชททั้งหมดให้โล่ง 100% ค๊าา! *(ต้องการสิทธิ์จัดการช่องแชลเนล)*", 
+                color=0x34495E
+            )
             await interaction.message.edit(embed=embed, view=ClearChannelView(current_guild))
 
         elif value == "setup_roles":
@@ -235,7 +240,7 @@ class BotCommandControlSelect(discord.ui.Select):
                     "**🌸 ความสามารถหลักของหนู (ฟังก์ชันเด่น):**\n"
                     "* **🎛️ แผงควบคุม UI อัจฉริยะ**: กดสั่งงานง่าย ๆ ผ่านปุ่มและเมนู Dropdown ไม่ต้องพิมพ์คำสั่งให้เหนื่อยค๊าา\n"
                     "* **🎵 มิวสิคบอร์ดแยกแท็บ**: เข้าหน้าต่างควบคุมเพลงและคิวได้แบบเป็นสัดส่วนผ่าน Dropdown\n"
-                    "* **🧹 ระบบล้างแชทด่วน**: สั่งกวาดล้างข้อความขยะในช่องแชทได้ในพริบตา\n"
+                    "* **🧹 ระบบล้างแชทและรีเซ็ตห้อง**: สั่งกวาดล้างข้อความขยะ หรือล้างห้องแชทให้ขาวสะอาด 100% ด้วยปุ่ม Nuke\n"
                     "* **🛡️ ระบบแจกและขอยศสุดตึง**: เลือกรับยศเอง หรือส่งคำขออ้อน ๆ มาขอยศพิเศษก็ได้น้าา\n"
                     "* **📊 โพลระดมความคิด**: สร้างคำถามและส่งไปห้องที่ต้องการ พร้อมระบบนับคะแนนเรียลไทม์\n"
                     "* **🎮 คลังแสงเซิร์ฟ Roblox**: รวมลิงก์ตั๋วเข้า Private Server เกมโปรดของแก๊งเราไว้ที่เดียว\n"
@@ -318,7 +323,7 @@ class BackToMainOnlyView(discord.ui.View):
 
 
 # ==========================================
-# 🎵 MUSIC CONTROL VIEW (หน้าต่างควบคุมเพลงแยกแท็บออกมาตามคำขอใหม่!)
+# 🎵 MUSIC CONTROL VIEW 
 # ==========================================
 class MusicControlView(discord.ui.View):
     def __init__(self, guild):
@@ -373,7 +378,7 @@ class MusicControlView(discord.ui.View):
 
 
 # ==========================================
-# 🧹 CLEAR CHANNEL COMPONENTS 
+# 🧹 CLEAR CHANNEL COMPONENTS (เพิ่มระบบ Nuke / Reset ห้องแชทที่นี่งับ!)
 # ==========================================
 class CustomClearModal(discord.ui.Modal, title="🧹 ระบุจำนวนข้อความที่ต้องการลบ"):
     def __init__(self):
@@ -410,21 +415,50 @@ class ClearChannelView(discord.ui.View):
         deleted = await interaction.channel.purge(limit=limit)
         await interaction.channel.send(f"🧹 น้อน Doro ใช้ไม้กวาดวิเศษเคลียร์ข้อความให้แล้ว {len(deleted)} ข้อความค๊าา! ✨", delete_after=4)
 
-    @discord.ui.button(label="🧹 ลบ 5 ข้อความล่าสุด", style=discord.ButtonStyle.secondary, row=0)
+    @discord.ui.button(label="🧹 ลบ 5 แชท", style=discord.ButtonStyle.secondary, row=0)
     async def clear_5(self, interaction: discord.Interaction, btn):
         await self.do_purge(interaction, 5)
 
-    @discord.ui.button(label="🧹 ลบ 10 ข้อความล่าสุด", style=discord.ButtonStyle.secondary, row=0)
+    @discord.ui.button(label="🧹 ลบ 10 แชท", style=discord.ButtonStyle.secondary, row=0)
     async def clear_10(self, interaction: discord.Interaction, btn):
         await self.do_purge(interaction, 10)
 
-    @discord.ui.button(label="🔥 ลบ 50 ข้อความล่าสุด", style=discord.ButtonStyle.danger, row=0)
+    @discord.ui.button(label="🔥 ลบ 50 แชท", style=discord.ButtonStyle.secondary, row=0)
     async def clear_50(self, interaction: discord.Interaction, btn):
         await self.do_purge(interaction, 50)
 
-    @discord.ui.button(label="✍️ กำหนดจำนวนข้อความเอง", style=discord.ButtonStyle.primary, row=1)
+    @discord.ui.button(label="✍️ กำหนดจำนวนเอง", style=discord.ButtonStyle.primary, row=0)
     async def clear_custom(self, interaction: discord.Interaction, btn):
         await interaction.response.send_modal(CustomClearModal())
+
+    # 💥 ปุ่มวิเศษสำหรับรีเซ็ตล้างระดานแชลเนลแบบ 100% (Nuke Channel) 
+    @discord.ui.button(label="🚨 รีเซ็ตห้องแชท (Nuke Channel)", style=discord.ButtonStyle.danger, emoji="💥", row=1)
+    async def nuke_channel_btn(self, interaction: discord.Interaction, btn):
+        # เช็คสิทธิ์ว่าผู้กดมีสิทธิ์จัดการแชลเนลไหมเพื่อความปลอดภัยของเซิร์ฟเวอร์ค๊าา
+        if not interaction.user.guild_permissions.manage_channels:
+            return await interaction.response.send_message("❌ คุณพี่ต้องมีสิทธิ์ 'จัดการช่องแชลเนล' (Manage Channels) ถึงจะสั่งระเบิดห้องแชทได้นะค๊าางึมมม", ephemeral=True)
+        
+        await interaction.response.defer()
+        current_channel = interaction.channel
+        
+        # คลอนนิ่งห้องเก่าขึ้นมาใหม่ (สิทธิ์, ชื่อ, หมวดหมู่ เหมือนเดิมหมด)
+        new_channel = await current_channel.clone(reason="Doro UI Nuke / Channel Reset Action")
+        
+        # ย้ายตำแหน่งห้องใหม่ให้ไปอยู่ที่เดียวกับห้องเก่าเป๊ะ ๆ 
+        await new_channel.edit(position=current_channel.position)
+        
+        # ลบห้องเก่าทิ้งทลายประวัติแชทขยะทิ้งไปเยย!
+        await current_channel.delete(reason="Doro UI Nuke / Channel Reset Action")
+        
+        # ส่งข้อความต้อนรับและ Gif สวย ๆ ในห้องใหม่ว่ารีเซ็ตเรียบร้อยแล้วค๊าา
+        embed_nuke = discord.Embed(
+            title="💥 ห้องแชทนี้ถูกรีเซ็ตเรียบร้อยแล้วค๊าา! (Channel Nuked Successfully)",
+            description=f"🧹 น้อน Doro จัดการระเบิดแชทเก่าทิ้ง และกวาดล้างข้อมูลขยะทั้งหมดให้สะอาดเอี่ยมอ่อง 100% แล้วนะค๊าา! พร้อมใช้งานแชทใหม่แบบลื่น ๆ เยยย ✨\n\n*ผู้สั่งรีเซ็ตห้อง: {interaction.user.mention}*",
+            color=0xFF3E3E
+        )
+        embed_nuke.set_image(url="https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExM2I4N2I5M2M5MmE0MDRmYjllNWE2ZGNmMDFlNTAwYjRjYmU0Zjg2ZiZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/hog2UAsK791U1mZ5r9/giphy.gif")
+        
+        await new_channel.send(embed=embed_nuke)
 
     @discord.ui.button(label="🔙 ย้อนกลับหน้าแรก", style=discord.ButtonStyle.success, emoji="⬅️", row=1)
     async def back(self, interaction: discord.Interaction, btn):
@@ -573,7 +607,7 @@ class VoteSelect(discord.ui.Select):
         p_id = interaction.message.id
         u_votes = vote_records.setdefault(p_id, {})
         u_votes[interaction.user.id] = self.values[0]
-        await interaction.response.send_message("✅ โหวตเสร็จสิ้น!", ephemeral=True, delete_after=2)
+        await interaction.response.send_message("✅ โหวตเสสิ้น!", ephemeral=True, delete_after=2)
 
 class AskQuestionView(discord.ui.View):
     def __init__(self, guild):
@@ -828,7 +862,6 @@ async def on_message(message: discord.Message):
             source = discord.FFmpegPCMAudio(song_data['url'], **FFMPEG_OPTIONS)
             vc.play(source, after=lambda e: play_next_song(guild_id, vc, message.channel))
             
-            # เมื่อพิมพ์สั่งด่วน ให้เปิดหน้าต่างควบคุมเพลงขึ้นมาเลยจ้า
             await message.channel.send(embed=generate_main_menu_embed(message.guild), view=MusicControlView(message.guild))
 
 bot.run(DISCORD_TOKEN)
