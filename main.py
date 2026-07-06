@@ -198,7 +198,6 @@ class BotCommandControlSelect(discord.ui.Select):
         value = self.values[0]
         current_guild = interaction.guild
 
-        # สร้าง View หลักขึ้นมาก่อนเสมอ เพื่อรักษาปุ่มเพลงและ Dropdown ไว้ด้านบน
         view = BotControlMenuView(current_guild)
 
         if value == "main_menu":
@@ -209,7 +208,6 @@ class BotCommandControlSelect(discord.ui.Select):
             embed = generate_main_menu_embed(current_guild)
             embed.add_field(name="🛡️ [ระบบจัดการยศอัตโนมัติ]", value="คุณชอบยศไหนเลือกรับจากเมนูด้านล่างนี้ได้เลยนะค๊าา หรือจะกดปุ่มขอยศพิเศษส่งเหตุผลหาแอดมินก็ได้น้าา~ ✨", inline=False)
             
-            # โคลนเอาปุ่มและ Select ของระบบยศมาฝังต่อท้าย View หลัก
             view.add_item(RoleSelect(current_guild))
             view.add_item(RequestRoleButton())
             view.add_item(RemoveAllRolesButton())
@@ -492,13 +490,16 @@ class AskQuestionView:
         
         self.s1 = discord.ui.Select(placeholder="📢 1. เลือกห้องที่จะปล่อยโพล", options=channels, row=3)
         self.s2 = discord.ui.Select(placeholder="📊 2. เลือกห้องที่จะให้สรุปคะแนน", options=channels, row=4)
+        
+        # เชื่อมโยง Callback ด้วยรูปแบบ lambda หรือประกาศ Method ปกติ
         self.s1.callback = self.c1
         self.s2.callback = self.c2
 
-    async self.c1(self, interaction): 
+    async def c1(self, interaction: discord.Interaction): 
         self.target_id = int(self.s1.values[0])
         await interaction.response.defer()
-    async self.c2(self, interaction): 
+
+    async def c2(self, interaction: discord.Interaction): 
         self.result_id = int(self.s2.values[0])
         await interaction.response.defer()
 
@@ -564,7 +565,6 @@ class MemberSelect(discord.ui.UserSelect):
         m_obj = interaction.guild.get_member(target.id)
         if m_obj:
             req = max(2, len([m for m in self.guild.members if m.status != discord.Status.offline and not m.bot]) // 2 + 1)
-            # แก้ไขเพื่อให้แสดงตัวเลือกระบบเตะต่อลงมาโดยไม่ล้างหน้าแผงควบคุมหลักออก
             view = BotControlMenuView(self.guild)
             view.add_item(VoteKickTypeButton(m_obj, req, "voice", "🔊 เตะออกจากห้องเสียง"))
             view.add_item(VoteKickTypeButton(m_obj, req, "server", "💥 ดีดออกจากเซิร์ฟเวอร์"))
