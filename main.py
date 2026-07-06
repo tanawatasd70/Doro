@@ -78,25 +78,27 @@ def save_roblox_data(data):
 
 
 # ==========================================
-# 🔓 NEW FEATURE: DYNAMIC GROUP ROLE VIEW (IMAGE STYLE)
+# 🔓 NEW FEATURE: DYNAMIC GROUP ROLE VIEW (🐈‍⬛ BLACK CAT THEME)
 # ==========================================
-# ปุ่มกดรับยศจริงที่จะแสดงผลตามภาพ (ใช้งานได้ตลอดกาล)
 class DynamicGroupJoinView(discord.ui.View):
     def __init__(self, role_id: int, emoji_str: str):
         super().__init__(timeout=None)
         self.role_id = role_id
         self.emoji_str = emoji_str
         
-        # สร้างปุ่มแบบ Dynamic ตามใจสั่งค๊าา
+        # ตั้งชื่อปุ่มตามอิโมจิที่แอดมินเลือกค๊าา
         btn_label = "รับยศกลุ่ม"
         if emoji_str == "🌸": btn_label = "ดอกไม้"
         elif emoji_str == "🔓": btn_label = "เข้าสู่กลุ่ม"
         elif emoji_str == "⚔️": btn_label = "รับยศนักรบ"
         elif emoji_str == "🔥": btn_label = "รับยศสายเดือด"
 
+        # ปรับสไตล์ปุ่มให้เข้ากับความเท่ (ถ้าเป็นดอกไม้ใช้ปุ่มสีแดง แต่อื่นๆ ใช้สีเทา/ดำหมองๆ เท่ๆ)
+        btn_style = discord.ButtonStyle.danger if emoji_str == "🌸" else discord.ButtonStyle.secondary
+
         btn = discord.ui.Button(
             label=btn_label, 
-            style=discord.ButtonStyle.danger if emoji_str == "🌸" else discord.ButtonStyle.success, 
+            style=btn_style, 
             emoji=emoji_str, 
             custom_id=f"doro_dyn_join_{role_id}"
         )
@@ -104,22 +106,24 @@ class DynamicGroupJoinView(discord.ui.View):
         self.add_item(btn)
 
     async def button_callback(self, interaction: discord.Interaction):
+        # 🤫 บังคับให้เป็น Ephemeral Mode (ข้อความเด้งแล้วหายไปเอง เห็นคนเดียว)
         await interaction.response.defer(ephemeral=True)
         role = interaction.guild.get_role(self.role_id)
         if not role:
             return await interaction.followup.send("❌ งื้อออ น้อนหาตัวยศนี้ในเซิร์ฟไม่เจอ แอดมินลบยศไปหรือเปล่านะ?", ephemeral=True)
 
         if role in interaction.user.roles:
-            # ถ้ามียศอยู่แล้ว กดอีกทีจะเป็นการคืนยศค๊าา (2-in-1 แบบคุ้ม ๆ)
+            # 🔄 ระบบ 2-in-1: ถ้ามียศอยู่แล้ว กดอีกทีจะเป็นการคืนยศชั่วคราว
             try:
                 await interaction.user.remove_roles(role)
                 return await interaction.followup.send(f"🏃‍♂️ ถอนยศ **{role.name}** และออกจากกลุ่มเรียบร้อยค๊าา ไว้แวะมาใหม่น้าา", ephemeral=True)
             except discord.Forbidden:
                 return await interaction.followup.send("❌ น้อนไม่มีสิทธิ์ถอนยศนี้ค๊าา", ephemeral=True)
 
+        # 👑 จังหวะกดรับยศสำเร็จ -> ข้อความแมวทมิฬจะขึ้นมาแล้วหายไปเองตามที่พี่ต้องการเยย!
         try:
             await interaction.user.add_roles(role)
-            await interaction.followup.send(f"🎉 ยินดีต้อนรับเข้าสู่กลุ่มค๊าา! มอบยศ **{role.name}** ให้เรียบร้อย ตอนนี้ห้องลับเปิดให้เข้าแล้วน้าา~ 💕", ephemeral=True)
+            await interaction.followup.send("🎉 ยินดีต้อนรับเข้าสู่กลุ่มค๊าา! มอบยศ M͟͞E͟͞M͟͞B͟͞E͟͞R͟͞ ให้เรียบร้อย ตอนนี้ห้องลับเปิดให้เข้าแล้วน้าา~ 💕", ephemeral=True)
         except discord.Forbidden:
             await interaction.followup.send("❌ น้อน Doro ไม่มีสิทธิ์แจกยศนี้ รบกวนแอดมินลากยศของบอทให้สูงกว่ายศที่จะแจกในตั้งค่าเซิร์ฟเวอร์น้าา", ephemeral=True)
 
@@ -129,12 +133,12 @@ class RoleSetupAdminView(discord.ui.View):
         super().__init__(timeout=60)
         self.guild = guild
         self.selected_role_id = None
-        self.selected_emoji = "🌸" # Default สวยๆ ตามภาพตัวอย่าง
+        self.selected_emoji = "🌸" # Default เริ่มต้น
 
-        # สุ่มรูปภาพกลุ่มสวยๆ สไตล์อนิเมะ/ซากุระ ไว้แสดงผล
+        # แบนเนอร์แมวดำเท่ ๆ สไตล์อนิเมะ
         self.group_images = [
-            "https://images.alphacoders.com/131/1311634.jpeg",
-            "https://images.alphacoders.com/134/1347065.png"
+            "https://images.alphacoders.com/133/1330962.png",
+            "https://images.alphacoders.com/112/1123447.jpg"
         ]
 
         # Dropdown เลือกยศในเซิร์ฟ
@@ -172,18 +176,21 @@ class RoleSetupAdminView(discord.ui.View):
         await interaction.response.defer()
         role = self.guild.get_role(self.selected_role_id)
         
-        # สร้างใบ Embed ตามภาพเป๊ะๆ ค๊าา
+        # 🖤 สร้างแผง Embed ตามรูปภาพ โครงสร้างเดิม แต่เปลี่ยนชื่อกลุ่มและสี UI เป็นสีดำ!
         embed = discord.Embed(
             title="ยินดีต้อนรับสู่โลกแห่งเซียน", 
-            description=f"### ยินดีต้อนรับครับ ✋\n### กดอิโมจิ{self.selected_emoji}เพื่อยืนยันครับ👇\n\nSAKURAWORD FAMILY🌸!",
-            color=0xFF69B4 if self.selected_emoji == "🌸" else 0x2ECC71
+            description=f"### ยินดีต้อนรับครับ ✋\n### กดอิโมจิ {self.selected_emoji} เพื่อยืนยันครับ👇\n\n**แมวทมิฬ FAMILY 🐈‍⬛🖤**!",
+            color=0x000000 # 🎨 ปรับแถบด้านข้างของ UI เป็นสีดำสนิทตามที่ขอค๊าา
         )
-        embed.set_image(url=random.choice(self.group_images)) # ใส่รูปกลุ่มสวย ๆ
+        
+        # 🐱 ใส่โลโก้รูปแมวดำอ้วนกลมจากไฟล์ภาพของพี่ (ดึงผ่าน URL ตัวแทนแบบยั่งยืน)
+        embed.set_thumbnail(url="https://images.unsplash.com/photo-1514888286974-6c03e2ca1dba?q=80&w=500") 
+        embed.set_image(url=random.choice(self.group_images)) # ภาพแบนเนอร์ใหญ่ตรงกลาง
 
         # ปล่อยกล่องรับยศตัวจริงลงห้องแชท
         await interaction.channel.send(embed=embed, view=DynamicGroupJoinView(self.selected_role_id, self.selected_emoji))
         
-        # ลบแผงควบคุมของแอดมินทิ้ง
+        # ลบแผงควบคุมของแอดมินทิ้งเพื่อความสะอาด
         await interaction.delete_original_response()
 
 
@@ -347,7 +354,7 @@ class BotCommandControlSelect(discord.ui.Select):
                 title="📘 สมุดคู่มือและบันทึกความสามารถของน้อน Doro 🤖✨",
                 description=(
                     "งื้อออ สวัสดีค่าา! หนูคือ **Doro** ยัยบอทสุดน่ารักที่จะมาช่วยดูแลและสร้างสีสันให้เซิร์ฟเวอร์ของทุกคนค๊าา 💕 หนูทำอะไรได้เยอะแยะเลยนะ ลองมาดูกันเยย! \n\n"
-                    "**🌸 ความสามารถหลักของหนู (ฟังก์ชันเด่น):**\n"
+                    "**🐈‍⬛ ความสามารถหลักของหนู (ฟังก์ชันเด่น):**\n"
                     "* **🎛️ แผงควบคุม UI อัจฉริยะ**: กดสั่งงานง่าย ๆ ผ่านปุ่มและเมนู Dropdown ไม่ต้องพิมพ์คำสั่งให้เหนื่อยค๊าา\n"
                     "* **🎵 มิวสิคบอร์ดแยกแท็บ**: เข้าหน้าต่างควบคุมเพลงและคิวได้แบบเป็นสัดส่วนผ่าน Dropdown\n"
                     "* **🧹 ระบบล้างแชทและรีเซ็ตห้อง**: สั่งกวาดล้างข้อความขยะ หรือล้างห้องแชทให้ขาวสะอาด 100% ด้วยปุ่ม Nuke\n"
@@ -361,7 +368,7 @@ class BotCommandControlSelect(discord.ui.Select):
                     "🔹 **`doro ให้ยศ` / `doro addrole`** : หน้าต่างด่วนสำหรับแอดมินแจกยศกลุ่มความเร็วสูง\n"
                     "🔹 **`doro ลบข้อความ <จำนวน>`** : สั่งเคลียร์ข้อความขยะในห้องแชท\n"
                     "🔹 **`doro เล่น <ชื่อเพลง/ลิงก์>`** : สั่งน้อน Doro ดำน้ำไปเปิดเพลงค๊าา 🎵\n"
-                    "🔹 **`doro สร้างปุ่มรับยศ`** : สั่งเปิดแผงตั้งค่า UI สร้างระบบรับยศตามรูปภาพกิ๊บเก๋ 🔓"
+                    "🔹 **`doro สร้างปุ่มรับยศ`** : สั่งเปิดแผงตั้งค่า UI สร้างระบบรับยศแมวทมิฬกล่องสีดำสุดเท่ 🖤"
                 ),
                 color=discord.Color.magenta()
             )
@@ -538,7 +545,7 @@ class ClearChannelView(discord.ui.View):
     async def clear_50(self, interaction: discord.Interaction, btn):
         await self.do_purge(interaction, 50)
 
-    @discord.ui.button(label="✍️ กำหนดจำนวนเอง", style=discord.ButtonStyle.primary, row=0)
+    @discord.ui.button(label="✍️ 定หนดจำนวนเอง", style=discord.ButtonStyle.primary, row=0)
     async def clear_custom(self, interaction: discord.Interaction, btn):
         await interaction.response.send_modal(CustomClearModal())
 
@@ -967,19 +974,19 @@ async def on_message(message: discord.Message):
             pass
         return
 
-    # 🔓 NEW DISCORD INTERACTION LOGIC (ตรงตามรูปภาพภาพที่ต้องการ)
+    # 🐈‍⬛ แผงเสกรับยศสไตล์ แมวทมิฬ
     if lower_msg == "doro สร้างปุ่มรับยศ":
         if not message.author.guild_permissions.manage_roles: return
         try:
-            await message.delete() # ลบข้อความที่พิมพ์ทันทีค๊าา!
+            await message.delete() # ลบข้อความทันทีค๊าา!
         except:
             pass
             
-        # เสกแผงตั้งค่าเบื้องหลังขึ้นมา (เป็นแบบ Ephemeral ปลอดภัยเห็นคนเดียว)
+        # แผงเบื้องหลังแอดมินตั้งค่าแบบ Ephemeral ลบอัตโนมัติภายใน 60 วินาที
         admin_setup_embed = discord.Embed(
             title="🛠️ แผงควบคุมตั้งค่ากล่องรับยศเข้ากลุ่ม (แอดมินโหมด)",
-            description="กรุณาเลือกยศที่ต้องการแจกและหน้าตาปุ่มอิโมจิด้านล่างให้ครบถ้วน จากนั้นกดปุ่มยืนยันเพื่อเสกหน้าต่างแจกยศค๊าา! ✨",
-            color=0x3498DB
+            description="กรุณาเลือกยศที่ต้องการแจกและหน้าตาปุ่มอิโมจิด้านล่างให้ครบถ้วน จากนั้นกดปุ่มยืนยันเพื่อเสกกล่องแมวทมิฬสีดำลงช่องแชทค๊าา! ✨",
+            color=0x000000
         )
         await message.channel.send(embed=admin_setup_embed, view=RoleSetupAdminView(message.guild), delete_after=60)
         return
