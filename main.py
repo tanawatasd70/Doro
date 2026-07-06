@@ -10,6 +10,9 @@ from datetime import datetime
 from discord.ext import commands
 from dotenv import load_dotenv
 from youtubesearchpython import VideosSearch
+import discord
+from discord.ext import commands
+import logging
 
 # ==========================================
 # 🌐 WEB SERVER FOR RENDER
