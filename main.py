@@ -182,11 +182,11 @@ class RoleSetupAdminView(discord.ui.View):
         role = self.guild.get_role(self.selected_role_id)
         
         embed = discord.Embed(
-            title="ยินดีต้อนรับสู่โลกแห่งเซียน", 
-            description=f"### ยินดีต้อนรับครับ ✋\n### กดอิโมจิ {self.selected_emoji} เพื่อยืนยันครับ👇\n\n**แมวทมิฬ FAMILY 🐈‍⬛🖤**!",
+            title="ยินดีต้อนรับนะทุกคน", 
+            description=f"### ยินดีต้อนรับค่ะ ✋\n### กดอิโมจิ {self.selected_emoji} เพื่อยืนยันค่ะ👇\n\n**แมวทมิฬ FAMILY 🐈‍⬛🖤**!",
             color=0x000000
         )
-        embed.set_thumbnail(url="https://images.unsplash.com/photo-1514888286974-6c03e2ca1dba?q=80&w=500") 
+        embed.set_thumbnail(url="https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcTS9PJ7Q9UyXEgGKBQPYyTCfCmFOlPJG0S0zflWephR5rE7aUtljzxT411f&s=10") 
         embed.set_image(url=random.choice(self.group_images))
 
         await interaction.channel.send(embed=embed, view=DynamicGroupJoinView(self.selected_role_id, self.selected_emoji))
