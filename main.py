@@ -209,12 +209,18 @@ class BotCommandControlSelect(discord.ui.Select):
             discord.SelectOption(label="🛡️ เปิดระบบจัดการ/ขอยศ", description="เรียกเมนู Dropdown เลือกรับยศ และปุ่มขอยศสุดน่ารัก", value="setup_roles"),
             discord.SelectOption(label="📊 เปิดระบบสร้างคำถามโพล", description="สร้างโพลน่ารัก ๆ เพื่อโหวตเลือกคำตอบกันเถอะ", value="setup_poll"),
             discord.SelectOption(label="🎮 รวมลิงก์ Private Server Roblox", description="คลังแสงลิงก์เซิร์ฟเวอร์วีเกมต่าง ๆ ของชาว Robloxค๊าา", value="roblox_servers"),
+            discord.SelectOption(label="🏗️ สร้างห้องแชทหลายห้อง", description="สร้างช่องแชทจำนวนมากในครั้งเดียวค๊าา", value="setup_channels"),
             discord.SelectOption(label="🚫 เริ่มวาระโหวตเตะสมาชิก", description="เลือกคนที่ทำตัวไม่น่ารักเพื่อเริ่มโหวตเตะกันค่ะ!", value="setup_kick"),
             discord.SelectOption(label="📖 ดูคู่มือคำสั่งบอททั้งหมด", description="มาดูคู่มือการสั่งงานและบันทึกความสามารถน้อน Doro กันงับ", value="show_commands")
         ]
         super().__init__(placeholder="🎛️ หรือเลือกโหมดทำงานอื่น ๆ ของน้อน Doro ที่นี่...", min_values=1, max_values=1, options=options, custom_id="doro_main_control_select", row=0)
 
     async def callback(self, interaction: discord.Interaction):
+        # หากเลือกสร้างช่องแชท ให้เปิด Modal โดยไม่ต้อง edit ข้อความ
+        if self.values[0] == "setup_channels":
+            await interaction.response.send_modal(MultiChannelModal(interaction.guild))
+            return
+
         await interaction.response.defer()
         value = self.values[0]
         current_guild = interaction.guild
@@ -240,15 +246,19 @@ class BotCommandControlSelect(discord.ui.Select):
         elif value == "setup_roles":
             embed = discord.Embed(title="🛡️ ระบบจัดการยศอัตโนมัติค๊าา", description="คุณชอบยศไหนเลือกรับจากเมนูด้านล่างนี้ได้เลยนะค๊าา หรือจะกดปุ่มขอยศพิเศษพร้อมส่งเหตุผลอ้อน ๆ มาให้แอดมินดูก็ได้น้าา~ ✨", color=0xFFB6C1)
             await interaction.message.edit(embed=embed, view=RequestRoleView(current_guild))
+            
         elif value == "setup_poll":
             embed = discord.Embed(title="📊 ระบบสร้างคำถามโพลระดมความคิดค๊าา", description="กรุณากรอกหัวข้อคำถาม และเลือกช่องทางปล่อยโพลให้ครบถ้วนด้านล่างนี้เลยน้าา~ ✨", color=0x9B59B6)
             await interaction.message.edit(embed=embed, view=AskQuestionView(current_guild))
+            
         elif value == "roblox_servers":
             embed = discord.Embed(title="🎮 คลังแสง Private Server ของแก๊งเรา! 🚀", description="อยากไปฟาร์ม ไปเวล หรือไปตึงเกมไหน เลือกชื่อเกมจากเมนูด้านล่างนี้ได้เลยค๊าา\n(สำหรับแอดมินสามารถกดปุ่มเพื่อเพิ่มหรือลบเกมได้เลยนะค๊าา) ✨", color=0x00E5FF)
             await interaction.message.edit(embed=embed, view=RobloxServerView(current_guild))
+            
         elif value == "setup_kick":
             embed = discord.Embed(title="🚫 ระบบโหวตเตะสมาชิก (โหมด Doro เอาจริง!)", description="โปรดเลือกรายชื่อคนที่ไม่น่ารักที่คุณต้องการเริ่มโหวตลงมติเตะด้านล่างนี้ได้เลยค่ะงึมมม", color=discord.Color.red())
             await interaction.message.edit(embed=embed, view=MemberSelectView(current_guild))
+            
         elif value == "show_commands":
             embed = discord.Embed(
                 title="📘 สมุดคู่มือและบันทึกความสามารถของน้อน Doro 🤖✨",
@@ -261,6 +271,7 @@ class BotCommandControlSelect(discord.ui.Select):
                     "* **🛡️ ระบบแจกและขอยศสุดตึง**: เลือกรับยศเอง หรือส่งคำขออ้อน ๆ มาขอยศพิเศษก็ได้น้าา\n"
                     "* **📊 โพลระดมความคิด**: สร้างคำถามและส่งไปห้องที่ต้องการ พร้อมระบบนับคะแนนเรียลไทม์\n"
                     "* **🎮 คลังแสงเซิร์ฟ Roblox**: รวมลิงก์ตั๋วเข้า Private Server เกมโปรดของแก๊งเราไว้ที่เดียว\n"
+                    "* **🏗️ สร้างห้องแชทหลายห้อง**: สั่งหนูสร้างห้องแชทใหม่พร้อมกันหลายห้องได้ในคลิกเดียว\n"
                     "* **🚫 ศาลเตี้ยโหวตเตะ**: เปิดวาระโหวตลงมติเพื่อดีดออกจากห้องเสียงหรือเซิร์ฟเวอร์\n\n"
                     "--------------------------------------------------\n"
                     "**✍️ สรุปคำสั่งพิมพ์ด่วน (Quick Commands):**\n"
