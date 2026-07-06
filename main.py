@@ -474,71 +474,98 @@ class ClearChannelView(discord.ui.View):
 # ==========================================
 # 🎮 ROBLOX MODALS & VIEWS
 # ==========================================
-class AddRobloxServerModal(discord.ui.Modal, title="🎮 เพิ่ม/แก้ไข ลิงก์เซิร์ฟเวอร์วี"):
-    def __init__(self):
+# ==========================================
+# 🎮 ROBLOX SYSTEM (ฉบับสมบูรณ์ - ใส่รูปได้/ไม่ใส่ก็ได้)
+# ==========================================
+
+# 1. หน้าต่างกรอกรายละเอียดเกม (เพิ่มช่องรูปภาพแบบ Optional)
+class AddRobloxServerModal(discord.ui.Modal, title="🎮 กรอกรายละเอียดเซิร์ฟเวอร์วี"):
+    def __init__(self, selected_emoji: str):
         super().__init__()
-        self.game_id = discord.ui.TextInput(label="รหัสเกม (อังกฤษตัวพิมพ์เล็ก ห้ามเว้นวรรค)", placeholder="เช่น blox_fruits")
-        self.game_name = discord.ui.TextInput(label="ชื่อเกมที่จะแสดงบนเมนู (ใส่ อีโมจิ ได้)", placeholder="เช่น 🏴‍☠️ Blox Fruits")
-        self.game_url = discord.ui.TextInput(label="ลิงก์ Private Server (Roblox URL)")
+        self.selected_emoji = selected_emoji
+        
+        self.game_id = discord.ui.TextInput(label="รหัสเกม (อังกฤษตัวพิมพ์เล็ก ห้ามเว้นวรรค)", placeholder="เช่น blox_fruits", required=True)
+        self.game_name = discord.ui.TextInput(label="ชื่อเกมที่จะแสดงบนเมนู", placeholder="เช่น Blox Fruits", required=True)
+        self.game_url = discord.ui.TextInput(label="ลิงก์ Private Server (Roblox URL)", placeholder="https://www.roblox.com/...", required=True)
+        self.game_image = discord.ui.TextInput(label="🖼️ ลิงก์รูปภาพปก (ถ้ามี) - เว้นว่างได้", placeholder="วางลิงก์รูปภาพที่นี่ (ถ้าไม่มีไม่ต้องใส่ค๊าา)", required=False)
+        
         self.add_item(self.game_id)
         self.add_item(self.game_name)
         self.add_item(self.game_url)
+        self.add_item(self.game_image)
         
     async def on_submit(self, interaction: discord.Interaction):
         g_id = self.game_id.value.strip().lower().replace(" ", "_")
-        current_data = load_roblox_data()
-        current_data[g_id] = {"name": self.game_name.value.strip(), "url": self.game_url.value.strip()}
-        save_roblox_data(current_data)
-        await interaction.response.send_message("✅ บันทึกเกมเรียบร้อยค๊าา!", ephemeral=True)
-
-class DeleteRobloxServerModal(discord.ui.Modal, title="🗑️ ลบลิงก์เซิร์ฟเวอร์วี"):
-    def __init__(self):
-        super().__init__()
-        self.game_id = discord.ui.TextInput(label="พิมพ์รหัสเกมที่ต้องการลบ")
-        self.add_item(self.game_id)
+        full_display_name = f"{self.selected_emoji} {self.game_name.value.strip()}"
         
-    async def on_submit(self, interaction: discord.Interaction):
-        g_id = self.game_id.value.strip().lower()
         current_data = load_roblox_data()
-        if g_id in current_data:
-            del current_data[g_id]
-            save_roblox_data(current_data)
-            await interaction.response.send_message("🗑️ ลบเรียบร้อยแล้วค๊าา!", ephemeral=True)
-        else: 
-            await interaction.response.send_message("❌ ไม่พบรหัสเกมนี้ค๊าา", ephemeral=True)
+        current_data[g_id] = {
+            "name": full_display_name, 
+            "url": self.game_url.value.strip(),
+            "image": self.game_image.value.strip() if self.game_image.value else None
+        }
+        save_roblox_data(current_data)
+        await interaction.response.send_message(f"✅ บันทึกเกม **{full_display_name}** เรียบร้อยค๊าา!", ephemeral=True)
 
+# 2. เมนูเลือกอิโมจิ
+class RobloxEmojiSelect(discord.ui.Select):
+    def __init__(self):
+        emoji_options = [
+            discord.SelectOption(label="🏴‍☠️ โจรสลัด", value="🏴‍☠️"),
+            discord.SelectOption(label="⚔️ ดาบไขว้", value="⚔️"),
+            discord.SelectOption(label="🔥 ไฟ/พลัง", value="🔥"),
+            discord.SelectOption(label="🥊 นวมต่อสู้", value="🥊"),
+            discord.SelectOption(label="⚽ ฟุตบอล", value="⚽"),
+            discord.SelectOption(label="⭐ ดาววิเศษ", value="⭐"),
+        ]
+        super().__init__(placeholder="🎨 เลือกอิโมจิประจำเกมก่อนนะค๊าา...", options=emoji_options)
+
+    async def callback(self, interaction: discord.Interaction):
+        await interaction.response.send_modal(AddRobloxServerModal(selected_emoji=self.values[0]))
+
+class RobloxEmojiSelectView(discord.ui.View):
+    def __init__(self):
+        super().__init__(timeout=60)
+        self.add_item(RobloxEmojiSelect())
+
+# 3. เมนูเลือกเกมและแสดงผล (รองรับรูปภาพ)
 class RobloxServerSelect(discord.ui.Select):
     def __init__(self):
         current_data = load_roblox_data()
-        if current_data:
-            options = [discord.SelectOption(label=data["name"][:90], value=key) for key, data in current_data.items()]
-        else:
-            options = [discord.SelectOption(label="ไม่มีเกมในคลังแสง", value="none")]
+        options = [discord.SelectOption(label=data["name"][:90], value=key) for key, data in current_data.items()] if current_data else [discord.SelectOption(label="ยังไม่มีเกมในคลัง", value="none")]
         super().__init__(placeholder="🎮 เลือกเกมที่ต้องการเข้าเล่นได้เลยค๊าา...", options=options)
         
     async def callback(self, interaction: discord.Interaction):
         if self.values[0] == "none": return
         game_data = load_roblox_data().get(self.values[0])
         if game_data:
+            embed = discord.Embed(title=f"🚀 เข้าเล่นเกม {game_data['name']}", color=0x00E5FF)
+            # ถ้ามีลิงก์รูป ให้ใส่รูป ถ้าไม่มีให้ข้ามไป
+            if game_data.get("image"):
+                embed.set_image(url=game_data["image"])
+            
             view = discord.ui.View()
-            view.add_item(discord.ui.Button(label="👉 เข้าเซิร์ฟเวอร์วีที่นี่", url=game_data['url']))
-            await interaction.response.send_message(f"🚀 ลิงก์เข้าเกม **{game_data['name']}**", view=view, ephemeral=True)
+            view.add_item(discord.ui.Button(label="👉 กดที่นี่เพื่อเข้าเซิร์ฟ", url=game_data['url']))
+            await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
 
+# 4. หน้าหลักระบบ Roblox
 class RobloxServerView(discord.ui.View):
     def __init__(self, guild):
         super().__init__(timeout=None)
         self.guild = guild
         self.add_item(RobloxServerSelect())
-    @discord.ui.button(label="➕ เพิ่มเกม", style=discord.ButtonStyle.primary, row=1)
+    
+    @discord.ui.button(label="➕ เพิ่มเกม", style=discord.ButtonStyle.primary, emoji="➕", row=1)
     async def add_btn(self, interaction: discord.Interaction, btn): 
-        await interaction.response.send_modal(AddRobloxServerModal())
-    @discord.ui.button(label="🗑️ ลบเกม", style=discord.ButtonStyle.danger, row=1)
+        await interaction.response.send_message("🎨 เลือกอิโมจิเพื่อเริ่มตั้งค่าเกมค๊าา:", view=RobloxEmojiSelectView(), ephemeral=True)
+        
+    @discord.ui.button(label="🗑️ ลบเกม", style=discord.ButtonStyle.danger, emoji="🗑️", row=1)
     async def del_btn(self, interaction: discord.Interaction, btn): 
         await interaction.response.send_modal(DeleteRobloxServerModal())
-    @discord.ui.button(label="🔙 ย้อนกลับหน้าแรก", style=discord.ButtonStyle.secondary, emoji="⬅️", row=1)
+        
+    @discord.ui.button(label="🔙 ย้อนกลับ", style=discord.ButtonStyle.secondary, emoji="⬅️", row=1)
     async def back(self, interaction: discord.Interaction, btn): 
         await interaction.message.edit(embed=generate_main_menu_embed(self.guild), view=BotControlMenuView(self.guild))
-
 
 # ==========================================
 # 🛡️ ROLE SYSTEM COMPONENTS
