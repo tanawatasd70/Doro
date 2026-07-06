@@ -582,13 +582,6 @@ class RobloxServerView(discord.ui.View):
     @discord.ui.button(label="➕ เพิ่มเกม", style=discord.ButtonStyle.primary, emoji="➕", row=1)
     async def add_btn(self, interaction: discord.Interaction, btn): 
         await interaction.response.send_message("🎨 เลือกอิโมจิเพื่อเริ่มตั้งค่าเกมค๊าา:", view=RobloxEmojiSelectView(), ephemeral=True)
-        
-    @discord.ui.button(label="🗑️ ลบเกม", style=discord.ButtonStyle.danger, emoji="🗑️", row=1)
-    async def del_btn(self, interaction: discord.Interaction, btn): 
-        await interaction.response.send_modal(DeleteRobloxServerModal())
-        
-    @discord.ui.button(label="🔙 ย้อนกลับ", style=discord.ButtonStyle.secondary, emoji="⬅️", row=1)
-    async def back(self, interaction: discord.Interaction, btn): 
         await interaction.message.edit(embed=generate_main_menu_embed(self.guild), view=BotControlMenuView(self.guild))
 
 # ==========================================
