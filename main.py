@@ -417,9 +417,13 @@ class MemberSelect(discord.ui.UserSelect):
         self.guild = guild
 
     async def callback(self, interaction: discord.Interaction):
+        # 🌟 เพิ่มบรรทัดนี้เพื่อยอมรับการโต้ตอบ (Acknowledge Interaction) ทันทีป้องกันการล้มเหลว
+        await interaction.response.defer()
+
         target_member = self.values[0]
         if target_member.id == interaction.user.id or target_member.bot:
-            return await interaction.response.send_message("❌ เลือกโหวตเตะคนนี้ไม่ได้ค๊าา!", ephemeral=True)
+            # เปลี่ยนเป็นส่งตามช่องแชทปกติ หรือใช้ followups เนื่องจากใช้ defer ไปแล้ว
+            return await interaction.followup.send("❌ เลือกโหวตเตะคนนี้ไม่ได้ค๊าา!", ephemeral=True)
 
         member_obj = interaction.guild.get_member(target_member.id)
         if not member_obj: return
