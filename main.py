@@ -225,11 +225,17 @@ class MultiChannelSetupView(discord.ui.View):
         self.add_item(self.category_select)
 
     async def select_category(self, interaction: discord.Interaction):
-        # เมื่อเลือกหมวดหมู่แล้ว ให้เด้ง Modal ให้พิมพ์ชื่อห้อง
-        category = interaction.data['resolved']['channels'][self.category_select.values[0]]
-        cat_obj = self.guild.get_channel(int(self.category_select.values[0]))
+        # 1. ดึง ID ของหมวดหมู่ที่เลือกออกมา
+        category_id = int(self.category_select.values[0])
         
-        await interaction.response.send_modal(MultiChannelInputModal(cat_obj))
+        # 2. ใช้ guild.get_channel เพื่อดึง object ของหมวดหมู่นั้นๆ
+        cat_obj = self.guild.get_channel(category_id)
+        
+        if cat_obj:
+            # 3. เปิด Modal สำหรับกรอกชื่อห้องโดยส่ง cat_obj ไปด้วย
+            await interaction.response.send_modal(MultiChannelInputModal(cat_obj))
+        else:
+            await interaction.response.send_message("❌ ไม่พบหมวดหมู่นี้ในเซิร์ฟเวอร์ค๊าา", ephemeral=True)
 
 class MultiChannelInputModal(discord.ui.Modal, title="🏗️ ระบุชื่อห้อง (คั่นด้วย ,)"):
     def __init__(self, category):
