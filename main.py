@@ -647,14 +647,24 @@ async def on_message(message: discord.Message):
             try:
                 current_channel = message.channel
                 position = current_channel.position
+                
                 await current_channel.send("⏳ กำลังรีเซ็ตห้องแชทใหม่ใน 3 วินาทีค๊าา...")
                 await asyncio.sleep(3)
+                
+                # 1. สร้างห้องใหม่
                 new_channel = await current_channel.clone(reason="Doro รีเซ็ตห้องแชทใหม่ค๊าา")
-                await current_channel.delete()
+                # 2. ย้ายตำแหน่ง
                 await new_channel.edit(position=position)
-                # ✨ ข้อความนี้ยังอยู่ครบถ้วน สวยงาม สดใส เหมือนเดิมเลยน้าา
-                await new_channel.send("✨ ชุบชีวิตห้องแชทใหม่เรียบร้อยแล้วค๊าา! สะอาดวิ้งงง~")
-            except Exception: pass
+                # 3. ลบห้องเก่า
+                await current_channel.delete()
+                
+                # 4. พักหายใจ 1 วินาที
+                await asyncio.sleep(1)
+                
+                # 🌟 5. ส่งข้อความต้อนรับ และให้มันลบตัวเองทิ้งอัตโนมัติภายใน 5 วินาทีค๊าา!
+                await new_channel.send("✨ ชุบชีวิตห้องแชทใหม่เรียบร้อยแล้วค๊าา! สะอาดวิ้งงง~", delete_after=5)
+            except Exception as e:
+                logger.error(f"Reset channel error: {e}")
             return
 
         # 🚀 2. ดักเช็กเมนูแผงควบคุมหลัก
