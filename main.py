@@ -186,76 +186,64 @@ class MusicSearchModal(discord.ui.Modal, title="🎵 ค้นหาและเ
 class BotCommandControlSelect(discord.ui.Select):
     def __init__(self):
         options = [
-            discord.SelectOption(label="🏠 หน้าแรก / เคลียร์เมนูย่อย", description="กลับสู่หน้าจอเริ่มต้น ล้างหน้าต่างการทำงานด้านล่าง", value="main_menu"),
-            discord.SelectOption(label="🎵 เปิดระบบควบคุมและเล่นเพลง", description="เข้าสู่หน้าต่างควบคุมมิวสิคบอร์ด เปิดเพลง/เลือกเพลงค๊าา", value="setup_music"),
-            discord.SelectOption(label="🧹 เปิดระบบล้างข้อความแชท", description="ลบข้อความขยะ/รีเซ็ตล้างห้องแชทให้เกลี้ยงในพริบตา", value="setup_clear"),
-            discord.SelectOption(label="🛡️ เปิดระบบจัดการ/ขอยศ", description="เรียกเมนู Dropdown เลือกรับยศ และปุ่มขอยศสุดน่ารัก", value="setup_roles"),
-            discord.SelectOption(label="📊 เปิดระบบสร้างคำถามโพล", description="สร้างโพลน่ารัก ๆ เพื่อโหวตเลือกคำตอบกันเถอะ", value="setup_poll"),
-            discord.SelectOption(label="🎮 รวมลิงก์ Private Server Roblox", description="คลังแสงลิงก์เซิร์ฟเวอร์วีเกมต่าง ๆ ของชาว Robloxค๊าา", value="roblox_servers"),
-            discord.SelectOption(label="🚫 เริ่มวาระโหวตเตะสมาชิก", description="เลือกคนที่ทำตัวไม่น่ารักเพื่อเริ่มโหวตเตะกันค่ะ!", value="setup_kick"),
-            discord.SelectOption(label="📖 ดูคู่มือคำสั่งบอททั้งหมด", description="มาดูคู่มือการสั่งงานและบันทึกความสามารถน้อน Doro กันงับ", value="show_commands")
+            discord.SelectOption(label="🏠 หน้าแรก", value="main_menu"),
+            discord.SelectOption(label="🎵 ระบบเพลง", value="setup_music"),
+            discord.SelectOption(label="🧹 ระบบล้างแชท", value="setup_clear"),
+            discord.SelectOption(label="🛡️ ระบบยศ", value="setup_roles"),
+            discord.SelectOption(label="📊 ระบบโพล", value="setup_poll"),
+            discord.SelectOption(label="🎮 ลิงก์ Roblox", value="roblox_servers"),
+            discord.SelectOption(label="🏗️ สร้างแชลแนลหลายห้อง", value="setup_channels"), # เพิ่มเมนูใหม่
+            discord.SelectOption(label="🚫 โหวตเตะสมาชิก", value="setup_kick"),
+            discord.SelectOption(label="📖 คู่มือบอท", value="show_commands")
         ]
-        super().__init__(placeholder="🎛️ หรือเลือกโหมดทำงานอื่น ๆ ของน้อน Doro ที่นี่...", min_values=1, max_values=1, options=options, custom_id="doro_main_control_select", row=0)
+        super().__init__(placeholder="🎛️ เลือกโหมดทำงาน...", options=options, custom_id="doro_main_control_select", row=0)
 
     async def callback(self, interaction: discord.Interaction):
         await interaction.response.defer()
         value = self.values[0]
         current_guild = interaction.guild
 
+        if value == "setup_channels":
+            # เรียกใช้ Modal สร้างแชลแนลที่คุณสร้างไว้ก่อนหน้า
+            await interaction.followup.send_modal(MultiChannelModal(current_guild))
+            return
+
+        # กำหนด Embed และ View ตามเมนูที่เลือก
         if value == "main_menu":
             embed = generate_main_menu_embed(current_guild)
-            await interaction.message.edit(embed=embed, view=BotControlMenuView(current_guild))
-            
+            view = BotControlMenuView(current_guild)
         elif value == "setup_music":
             embed = generate_main_menu_embed(current_guild)
-            await interaction.message.edit(embed=embed, view=MusicControlView(current_guild))
-
+            view = MusicControlView(current_guild)
         elif value == "setup_clear":
-            embed = discord.Embed(
-                title="🧹 ระบบจัดการและล้างข้อความในช่องแชท", 
-                description="คุณพี่ต้องการให้น้อน Doro จัดการช่องแชทนี้อย่างไรดีค๊าา?\n\n"
-                            "🔹 **ลบตามจำนวนล่าสุด**: กวาดล้างข้อความเก่าออกตามจำนวนที่เลือก\n"
-                            "⚠️ **รีเซ็ตห้องแชท (Nuke)**: ทำการโคลนและลบห้องเดิมทิ้งทันที เพื่อล้างประวัติแชททั้งหมดให้โล่ง 100% ค๊าา! *(ต้องการสิทธิ์จัดการช่องแชลเนล)*", 
-                color=0x34495E
-            )
-            await interaction.message.edit(embed=embed, view=ClearChannelView(current_guild))
-
+            embed = discord.Embed(title="🧹 ระบบล้างแชท", color=0x34495E)
+            view = ClearChannelView(current_guild)
         elif value == "setup_roles":
-            embed = discord.Embed(title="🛡️ ระบบจัดการยศอัตโนมัติค๊าา", description="คุณชอบยศไหนเลือกรับจากเมนูด้านล่างนี้ได้เลยนะค๊าา หรือจะกดปุ่มขอยศพิเศษพร้อมส่งเหตุผลอ้อน ๆ มาให้แอดมินดูก็ได้น้าา~ ✨", color=0xFFB6C1)
-            await interaction.message.edit(embed=embed, view=RequestRoleView(current_guild))
+            embed = discord.Embed(title="🛡️ ระบบยศ", color=0xFFB6C1)
+            view = RequestRoleView(current_guild)
         elif value == "setup_poll":
-            embed = discord.Embed(title="📊 ระบบสร้างคำถามโพลระดมความคิดค๊าา", description="กรุณากรอกหัวข้อคำถาม และเลือกช่องทางปล่อยโพลให้ครบถ้วนด้านล่างนี้เลยน้าา~ ✨", color=0x9B59B6)
-            await interaction.message.edit(embed=embed, view=AskQuestionView(current_guild))
+            embed = discord.Embed(title="📊 ระบบโพล", color=0x9B59B6)
+            view = AskQuestionView(current_guild)
         elif value == "roblox_servers":
-            embed = discord.Embed(title="🎮 คลังแสง Private Server ของแก๊งเรา! 🚀", description="อยากไปฟาร์ม ไปเวล หรือไปตึงเกมไหน เลือกชื่อเกมจากเมนูด้านล่างนี้ได้เลยค๊าา\n(สำหรับแอดมินสามารถกดปุ่มเพื่อเพิ่มหรือลบเกมได้เลยนะค๊าา) ✨", color=0x00E5FF)
-            await interaction.message.edit(embed=embed, view=RobloxServerView(current_guild))
+            embed = discord.Embed(title="🎮 Roblox Servers", color=0x00E5FF)
+            view = RobloxServerView(current_guild)
         elif value == "setup_kick":
-            embed = discord.Embed(title="🚫 ระบบโหวตเตะสมาชิก (โหมด Doro เอาจริง!)", description="โปรดเลือกรายชื่อคนที่ไม่น่ารักที่คุณต้องการเริ่มโหวตลงมติเตะด้านล่างนี้ได้เลยค่ะงึมมม", color=discord.Color.red())
-            await interaction.message.edit(embed=embed, view=MemberSelectView(current_guild))
+            embed = discord.Embed(title="🚫 ระบบโหวตเตะ", color=discord.Color.red())
+            view = MemberSelectView(current_guild)
         elif value == "show_commands":
-            embed = discord.Embed(
-                title="📘 สมุดคู่มือและบันทึกความสามารถของน้อน Doro 🤖✨",
-                description=(
-                    "งื้อออ สวัสดีค่าา! หนูคือ **Doro** ยัยบอทสุดน่ารักที่จะมาช่วยดูแลและสร้างสีสันให้เซิร์ฟเวอร์ของทุกคนค๊าา 💕 หนูทำอะไรได้เยอะแยะเลยนะ ลองมาดูกันเยย! \n\n"
-                    "**🌸 ความสามารถหลักของหนู (ฟังก์ชันเด่น):**\n"
-                    "* **🎛️ แผงควบคุม UI อัจฉริยะ**: กดสั่งงานง่าย ๆ ผ่านปุ่มและเมนู Dropdown ไม่ต้องพิมพ์คำสั่งให้เหนื่อยค๊าา\n"
-                    "* **🎵 มิวสิคบอร์ดแยกแท็บ**: เข้าหน้าต่างควบคุมเพลงและคิวได้แบบเป็นสัดส่วนผ่าน Dropdown\n"
-                    "* **🧹 ระบบล้างแชทและรีเซ็ตห้อง**: สั่งกวาดล้างข้อความขยะ หรือล้างห้องแชทให้ขาวสะอาด 100% ด้วยปุ่ม Nuke\n"
-                    "* **🛡️ ระบบแจกและขอยศสุดตึง**: เลือกรับยศเอง หรือส่งคำขออ้อน ๆ มาขอยศพิเศษก็ได้น้าา\n"
-                    "* **📊 โพลระดมความคิด**: สร้างคำถามและส่งไปห้องที่ต้องการ พร้อมระบบนับคะแนนเรียลไทม์\n"
-                    "* **🎮 คลังแสงเซิร์ฟ Roblox**: รวมลิงก์ตั๋วเข้า Private Server เกมโปรดของแก๊งเราไว้ที่เดียว\n"
-                    "* **🚫 ศาลเตี้ยโหวตเตะ**: เปิดวาระโหวตลงมติเพื่อดีดออกจากห้องเสียงหรือเซิร์ฟเวอร์\n\n"
-                    "--------------------------------------------------\n"
-                    "**✍️ สรุปคำสั่งพิมพ์ด่วน (Quick Commands):**\n"
-                    "🔹 **`doro เมนู` / `doro menu` / `doro คำสั่งเพลง`** : เรียกเปิดแผงควบคุมระบบ UI ทั้งหมดค๊าา\n"
-                    "🔹 **`doro ให้ยศ` / `doro addrole`** : หน้าต่างด่วนสำหรับแอดมินแจกยศกลุ่มความเร็วสูง\n"
-                    "🔹 **`doro ลบข้อความ <จำนวน>`** : สั่งเคลียร์ข้อความขยะในห้องแชท\n"
-                    "🔹 **`doro เล่น <ชื่อเพลง/ลิงก์>`** : สั่งน้อน Doro ดำน้ำไปเปิดเพลงค๊าา 🎵"
-                ),
-                color=discord.Color.magenta()
-            )
-            await interaction.message.edit(embed=embed, view=BackToMainOnlyView(current_guild))
+            embed = discord.Embed(title="📖 คู่มือการใช้งาน", color=discord.Color.magenta(), description="รายละเอียดคำสั่ง...")
+            view = BackToMainOnlyView(current_guild)
+        
+        await interaction.message.edit(embed=embed, view=view)
 
+class BotControlMenuView(discord.ui.View):
+    def __init__(self, guild):
+        super().__init__(timeout=None)
+        self.add_item(BotCommandControlSelect())
+    
+    @discord.ui.button(label="❌ ปิดเมนู", style=discord.ButtonStyle.danger, row=1)
+    async def cancel_button(self, interaction, button):
+        await interaction.message.delete()
 class BotControlMenuView(discord.ui.View):
     def __init__(self, guild):
         super().__init__(timeout=None)
@@ -921,5 +909,8 @@ async def on_message(message: discord.Message):
             vc.play(source, after=lambda e: play_next_song(guild_id, vc, message.channel))
             
             await message.channel.send(embed=generate_main_menu_embed(message.guild), view=MusicControlView(message.guild))
+@bot.event
+async def on_ready(): 
+    logger.info(f"Doro UI Engine is Running!")
 
 bot.run(DISCORD_TOKEN)
