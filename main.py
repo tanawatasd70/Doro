@@ -43,11 +43,8 @@ custom_responses = {
     "doro hi": "งื้อออ สวัสดีค่าา! ยินดีที่ได้คุยด้วยนะคะ วันนี้มีอะไรให้หนูช่วยไหมเอ่ย? 🌸",
 }
 
-user_contexts = {}
 vote_records = {}  
 poll_result_messages = {} 
-music_queues = {}  
-now_playing = {}   
 
 # ==========================================
 # 🎮 ROBLOX PRIVATE SERVER DATABASE SYSTEM
@@ -138,6 +135,7 @@ class BotCommandControlSelect(discord.ui.Select):
                 title="📘 สมุดคู่มือของน้อน Doro 🤖✨ (ระบบดักคำผิดเปิดใช้งานแล้ว)",
                 description=(
                     "**🔹 doro เมนู / doro menu** : เปิดแผงควบคุม UI\n"
+                    "**🔹 doro ให้ยศ / doro addrole** : เปิดหน้าต่าง UI แจกยศกลุ่มความเร็วสูง\n"
                     "**🔹 doro ค้นหา / doro search <ข้อความ>** : ดำน้ำหาคลิป YouTube\n"
                     "**🔹 doro สมาชิกทั้งหมด / doro member** : ดูสถิติคนในเซิร์ฟ\n"
                     "**🔹 doro เวลา / doro time** : เช็กเวลาปัจจุบัน\n"
@@ -244,14 +242,12 @@ class RobloxServerView(discord.ui.View):
         try:
             await interaction.message.delete()
         except Exception:
-            try:
-                await interaction.delete_original_response()
-            except Exception:
-                pass
+            try: await interaction.delete_original_response()
+            except Exception: pass
 
 
 # ==========================================
-# 🛡️ ROLE SYSTEM 
+# 🛡️ ROLE SYSTEM & MULTI-ROLE UI
 # ==========================================
 class RoleSelect(discord.ui.Select):
     def __init__(self, guild):
@@ -333,6 +329,91 @@ class RequestRoleView(discord.ui.View):
         except Exception:
             try: await interaction.delete_original_response()
             except Exception: pass
+
+# 🌟 เพิ่มคลาสใหม่: เมนูดร็อปดาวน์เลือกยศสำหรับหน้าแจกยศกลุ่ม
+class MultiRoleSelectDropdown(discord.ui.Select):
+    def __init__(self, guild):
+        roles = [r for r in guild.roles if r.name != "@everyone" and not r.managed]
+        options = [discord.SelectOption(label=r.name[:90], value=str(r.id)) for r in roles[:25]]
+        super().__init__(placeholder="🛡️ ขั้นตอนที่ 1: เลือกยศที่ต้องการแจก...", options=options, custom_id="multi_role_dropdown")
+
+    async def callback(self, interaction: discord.Interaction):
+        self.view.selected_role_id = int(self.values[0])
+        await interaction.response.defer()
+
+# 🌟 เพิ่มคลาสใหม่: เมนูเลือกสมาชิกได้หลายคนพร้อมกัน (สูงสุด 25 คน)
+class MultiMemberSelectDropdown(discord.ui.UserSelect):
+    def __init__(self):
+        super().__init__(placeholder="👥 ขั้นตอนที่ 2: เลือกสมาชิกที่ต้องการมอบยศให้ (เลือกได้หลายคน)...", min_values=1, max_values=25, custom_id="multi_member_dropdown")
+
+    async def callback(self, interaction: discord.Interaction):
+        self.view.selected_members = self.values
+        await interaction.response.defer()
+
+# 🌟 เพิ่มคลาสใหม่: หน้าต่าง UI ควบคุมการแจกยศกลุ่มทั้งหมด
+class MultiRoleManagementView(discord.ui.View):
+    def __init__(self, guild):
+        super().__init__(timeout=180)
+        self.guild = guild
+        self.selected_role_id = None
+        self.selected_members = []
+        
+        self.add_item(MultiRoleSelectDropdown(guild))
+        self.add_item(MultiMemberSelectDropdown())
+
+    @discord.ui.button(label="🚀 ยืนยันแจกยศให้ทุกคนเลยค๊าา!", style=discord.ButtonStyle.success, emoji="✅", row=2)
+    async def confirm_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if not self.selected_role_id:
+            return await interaction.response.send_message("❌ โปรดเลือกยศก่อนนะค๊าา!", ephemeral=True)
+        if not self.selected_members:
+            return await interaction.response.send_message("❌ โปรดเลือกสมาชิกอย่างน้อย 1 คนด้วยน้าา!", ephemeral=True)
+            
+        await interaction.response.defer()
+        target_role = self.guild.get_role(self.selected_role_id)
+        
+        if not target_role:
+            return await interaction.followup.send("❌ ไม่พบข้อมูลยศนี้แล้วค๊าา", ephemeral=True)
+
+        success_count = 0
+        failed_count = 0
+        
+        for user in self.selected_members:
+            member_obj = self.guild.get_member(user.id)
+            if member_obj:
+                try:
+                    await member_obj.add_roles(target_role)
+                    success_count += 1
+                except discord.Forbidden:
+                    failed_count += 1
+
+        embed_res = discord.Embed(
+            title="🛡️ ผลการแจกยศกลุ่มผ่านระบบอัจฉริยะ ✨",
+            description=f"มอบยศ **{target_role.mention}** ให้กับทุกคนเรียบร้อยค๊าา!",
+            color=0x2ECC71
+        )
+        embed_res.add_field(name="🟢 สำเร็จ", value=f"**{success_count}** คน")
+        if failed_count > 0:
+            embed_res.add_field(name="🔴 ล้มเหลว (พลังบอทต่ำกว่ายศ)", value=f"**{failed_count}** คน")
+            
+        # 💥 ส่งผลลัพธ์และลบหน้าต่างควบคุม UI ทันทีตามใจต้องการเยย!
+        try:
+            await interaction.message.delete()
+        except Exception:
+            try: await interaction.delete_original_response()
+            except Exception: pass
+            
+        await interaction.channel.send(embed=embed_res, delete_after=15)
+        self.stop()
+
+    @discord.ui.button(label="ยกเลิก / ปิดเมนู", style=discord.ButtonStyle.danger, emoji="🔴", row=2)
+    async def cancel_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.defer()
+        try:
+            await interaction.message.delete()
+        except Exception:
+            try: await interaction.delete_original_response()
+            except Exception: pass
+        self.stop()
 
 
 # ==========================================
@@ -636,38 +717,6 @@ async def on_message(message: discord.Message):
             await message.channel.send(custom_responses[lower_msg])
             return
 
-        # 🚀 1. ดักระบบรีเซ็ตห้องก่อน (ย้ายขึ้นมาบนสุดเพื่อให้แม่นยำ ไม่โดนเมนูกลืน)
-        is_reset_cmd = False
-        for keyword in ["รีเซ็ตห้อง", "รีเซตห้อง", "รีเซ็ต", "รีเซต", "reset"]:
-            if f"doro {keyword}" in lower_msg or f"doro{keyword}" in lower_msg:
-                is_reset_cmd = True
-                break
-        if is_reset_cmd:
-            if not message.author.guild_permissions.manage_channels: return
-            try:
-                current_channel = message.channel
-                position = current_channel.position
-                
-                await current_channel.send("⏳ กำลังรีเซ็ตห้องแชทใหม่ใน 3 วินาทีค๊าา...")
-                await asyncio.sleep(3)
-                
-                # 1. สร้างห้องใหม่
-                new_channel = await current_channel.clone(reason="Doro รีเซ็ตห้องแชทใหม่ค๊าา")
-                # 2. ย้ายตำแหน่ง
-                await new_channel.edit(position=position)
-                # 3. ลบห้องเก่า
-                await current_channel.delete()
-                
-                # 4. พักหายใจ 1 วินาที
-                await asyncio.sleep(1)
-                
-                # 🌟 5. ส่งข้อความต้อนรับ และให้มันลบตัวเองทิ้งอัตโนมัติภายใน 5 วินาทีค๊าา!
-                await new_channel.send("✨ ชุบชีวิตห้องแชทใหม่เรียบร้อยแล้วค๊าา! สะอาดวิ้งงง~", delete_after=5)
-            except Exception as e:
-                logger.error(f"Reset channel error: {e}")
-            return
-
-        # 🚀 2. ดักเช็กเมนูแผงควบคุมหลัก
         is_menu_cmd = False
         for keyword in ["เมนู", "เมณู", "เเมนู", "menu", "munu", "menuu"]:
             if f"doro {keyword}" in lower_msg or f"doro{keyword}" in lower_msg:
@@ -678,6 +727,29 @@ async def on_message(message: discord.Message):
             except Exception: pass
             embed = discord.Embed(title="⚙️ Doro แผงควบคุมระบบอัจฉริยะสุดน่ารัก (UI Mode)", description="ยินดีต้อนรับสู่ดินแดนแห่งความน่ารักค๊าา! เลือกเมนูด้านล่างนี้เพื่อเปิดใช้งานฟังก์ชันได้ตามใจชอบเลยนะค๊าา ✨", color=0x3498DB)
             await message.channel.send(embed=embed, view=BotControlMenuView())
+            return
+
+        # 🌟 ปรับปรุงใหม่: ระบบให้ยศคนอื่นหลายคนพร้อมกันในโหมด UI สุดหรู!
+        is_add_role_cmd = False
+        for keyword in ["ให้ยศ", "แจกยศ", "addrole", "giverole"]:
+            if f"doro {keyword}" in lower_msg or f"doro{keyword}" in lower_msg:
+                is_add_role_cmd = True
+                break
+        if is_add_role_cmd:
+            try: await message.delete()
+            except Exception: pass
+
+            if not (message.author.guild_permissions.manage_roles or message.author.guild_permissions.administrator):
+                await message.channel.send("❌ โธ่.. สิทธิ์ของคุณไม่พอที่จะใช้ระบบแจกยศกลุ่มค๊าางึมมม", delete_after=5)
+                return
+
+            embed = discord.Embed(
+                title="🛡️ ระบบมอบยศกลุ่มอัจฉริยะ (UI High-Speed)",
+                description="โปรดเลือก **ยศ** และ **รายชื่อสมาชิก** ที่คุณต้องการมอบยศให้ด้านล่างนี้ได้เลยค๊าา เมนูนี้จะทำลายตัวเองทันทีเมื่อใช้งานเสร็จสิ้นค่ะ ✨",
+                color=0x2ECC71
+            )
+            view = MultiRoleManagementView(message.guild)
+            await message.channel.send(embed=embed, view=view)
             return
 
         is_kick_cmd = False
@@ -759,6 +831,26 @@ async def on_message(message: discord.Message):
             try:
                 deleted = await message.channel.purge(limit=int(parts[2]) + 1)
                 await message.channel.send(f"🧹 เสกข้อความหายวับไป {len(deleted)-1} ข้อความแล้วค่ะ!", delete_after=3)
+            except Exception: pass
+            return
+
+        is_reset_cmd = False
+        for keyword in ["รีเซ็ตห้อง", "รีเซตห้อง", "รีเซ็ต", "รีเซต", "reset"]:
+            if f"doro {keyword}" in lower_msg or f"doro{keyword}" in lower_msg:
+                is_reset_cmd = True
+                break
+        if is_reset_cmd:
+            if not message.author.guild_permissions.manage_channels: return
+            try:
+                current_channel = message.channel
+                position = current_channel.position
+                await current_channel.send("⏳ กำลังรีเซ็ตห้องแชทใหม่ใน 3 วินาทีค๊าา...")
+                await asyncio.sleep(3)
+                new_channel = await current_channel.clone(reason="Doro รีเซ็ตห้องแชทใหม่ค๊าา")
+                await new_channel.edit(position=position)
+                await current_channel.delete()
+                await asyncio.sleep(1)
+                await new_channel.send("✨ ชุบชีวิตห้องแชทใหม่เรียบร้อยแล้วค๊าา! สะอาดวิ้งงง~", delete_after=5)
             except Exception: pass
             return
 
