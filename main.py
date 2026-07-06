@@ -178,8 +178,8 @@ class RoleSetupAdminView(discord.ui.View):
         
         # 🖤 สร้างแผง Embed ตามรูปภาพ โครงสร้างเดิม แต่เปลี่ยนชื่อกลุ่มและสี UI เป็นสีดำ!
         embed = discord.Embed(
-            title="ยินดีต้อนรับสู่โลกแห่งเซียน", 
-            description=f"### ยินดีต้อนรับครับ ✋\n### กดอิโมจิ {self.selected_emoji} เพื่อยืนยันครับ👇\n\n**แมวทมิฬ FAMILY 🐈‍⬛🖤**!",
+            title="ยินดีต้อนรับค๊าาา", 
+            description=f"### สวัดดีค่ะ ✋\n### กดอิโมจิ {self.selected_emoji} เพื่อยืนยันนะคะด้าน👇\n\n**แมวทมิฬ FAMILY 🐈‍⬛🖤**!",
             color=0x000000 # 🎨 ปรับแถบด้านข้างของ UI เป็นสีดำสนิทตามที่ขอค๊าา
         )
         
@@ -394,9 +394,9 @@ def generate_main_menu_embed(guild):
     vc = guild.voice_client
 
     embed = discord.Embed(
-        title="⚙️ Doro แผงควบคุมระบบอัจฉริยะสุดน่ารัก (All-in-One UI Mode)", 
-        description="ยินดีต้อนรับค๊าา! ตอนนี้ปุ่มควบคุมเพลงถูกย้ายเข้าไปอยู่ในหัวข้อ **'🎵 เปิดระบบควบคุมและเล่นเพลง'** ใน Dropdown ด้านล่างแล้วนะค๊าา เพื่อความสะอาดตา เลือกโหมดใช้งานน้อนได้เลยน้าา ✨", 
-        color=0x3498DB
+        title="⚙️ Doro แผงควบคุมระบบอัจฉริยะสุดน่ารัก ❤️‍🔥 ", 
+        description="ยินดีต้อนรับค๊าา! ตอนนี้ปุ่มควบคุมเพลงถูกย้ายเข้าไปอยู่ในหัวข้อ แถบด้านล่าง นายสามารถเลือกโหมดใช้งานเราได้เลยน้าา ✨", 
+        color=0xFFB6C1
     )
     
     if vc and vc.is_connected() and song:
