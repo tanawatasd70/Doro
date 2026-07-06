@@ -240,7 +240,6 @@ class RobloxServerView(discord.ui.View):
 
     @discord.ui.button(label="ปิดเมนู", style=discord.ButtonStyle.secondary, emoji="🔴", custom_id="roblox_cancel_btn")
     async def cancel_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        # 🌟 ปรับปรุงให้รองรับการลบข้อความแบบ Ephemeral (เห็นคนเดียว) ป้องกันการค้างคา
         await interaction.response.defer()
         try:
             await interaction.message.delete()
@@ -637,6 +636,28 @@ async def on_message(message: discord.Message):
             await message.channel.send(custom_responses[lower_msg])
             return
 
+        # 🚀 1. ดักระบบรีเซ็ตห้องก่อน (ย้ายขึ้นมาบนสุดเพื่อให้แม่นยำ ไม่โดนเมนูกลืน)
+        is_reset_cmd = False
+        for keyword in ["รีเซ็ตห้อง", "รีเซตห้อง", "รีเซ็ต", "รีเซต", "reset"]:
+            if f"doro {keyword}" in lower_msg or f"doro{keyword}" in lower_msg:
+                is_reset_cmd = True
+                break
+        if is_reset_cmd:
+            if not message.author.guild_permissions.manage_channels: return
+            try:
+                current_channel = message.channel
+                position = current_channel.position
+                await current_channel.send("⏳ กำลังรีเซ็ตห้องแชทใหม่ใน 3 วินาทีค๊าา...")
+                await asyncio.sleep(3)
+                new_channel = await current_channel.clone(reason="Doro รีเซ็ตห้องแชทใหม่ค๊าา")
+                await current_channel.delete()
+                await new_channel.edit(position=position)
+                # ✨ ข้อความนี้ยังอยู่ครบถ้วน สวยงาม สดใส เหมือนเดิมเลยน้าา
+                await new_channel.send("✨ ชุบชีวิตห้องแชทใหม่เรียบร้อยแล้วค๊าา! สะอาดวิ้งงง~")
+            except Exception: pass
+            return
+
+        # 🚀 2. ดักเช็กเมนูแผงควบคุมหลัก
         is_menu_cmd = False
         for keyword in ["เมนู", "เมณู", "เเมนู", "menu", "munu", "menuu"]:
             if f"doro {keyword}" in lower_msg or f"doro{keyword}" in lower_msg:
@@ -728,25 +749,6 @@ async def on_message(message: discord.Message):
             try:
                 deleted = await message.channel.purge(limit=int(parts[2]) + 1)
                 await message.channel.send(f"🧹 เสกข้อความหายวับไป {len(deleted)-1} ข้อความแล้วค่ะ!", delete_after=3)
-            except Exception: pass
-            return
-
-        is_reset_cmd = False
-        for keyword in ["รีเซ็ตห้อง", "รีเซตห้อง", "รีเซ็ต", "รีเซต", "reset"]:
-            if f"doro {keyword}" in lower_msg or f"doro{keyword}" in lower_msg:
-                is_reset_cmd = True
-                break
-        if is_reset_cmd:
-            if not message.author.guild_permissions.manage_channels: return
-            try:
-                current_channel = message.channel
-                position = current_channel.position
-                await current_channel.send("⏳ กำลังรีเซ็ตห้องแชทใหม่ใน 3 วินาทีค๊าา...")
-                await asyncio.sleep(3)
-                new_channel = await current_channel.clone(reason="Doro รีเซ็ตห้องแชทใหม่ค๊าา")
-                await current_channel.delete()
-                await new_channel.edit(position=position)
-                await new_channel.send("✨ ชุบชีวิตห้องแชทใหม่เรียบร้อยแล้วค๊าา! สะอาดวิ้งงง~")
             except Exception: pass
             return
 
