@@ -710,6 +710,7 @@ class AskQuestionView(discord.ui.View):
 # ==========================================
 # 🚫 VOTE KICK SYSTEM COMPONENTS
 # ==========================================
+# 🚫 VOTE KICK SYSTEM COMPONENTS (แก้ไขเพิ่มปุ่มย้อนกลับ)
 class MemberSelect(discord.ui.UserSelect):
     def __init__(self, guild):
         super().__init__(placeholder="👤 จิ้มเลือกคนที่ไม่น่ารักตรงนี้เลยงับ...")
@@ -720,38 +721,39 @@ class MemberSelect(discord.ui.UserSelect):
         m_obj = interaction.guild.get_member(target.id)
         if m_obj:
             req = max(2, len([m for m in self.guild.members if m.status != discord.Status.offline and not m.bot]) // 2 + 1)
-            await interaction.message.edit(embed=discord.Embed(title="🛠️ ตั้งค่าศาลเตี้ยโหวตเตะ", description=f"เป้าหมาย: {m_obj.mention}"), view=VoteKickTypeView(m_obj, req))
+            # เพิ่ม view ใหม่ที่รวมปุ่มย้อนกลับเข้าไปด้วย
+            await interaction.message.edit(embed=discord.Embed(title="🛠️ ตั้งค่าศาลเตี้ยโหวตเตะ", description=f"เป้าหมาย: {m_obj.mention}"), view=VoteKickTypeView(m_obj, req, self.guild))
 
 class MemberSelectView(discord.ui.View):
     def __init__(self, guild): 
         super().__init__(timeout=60)
         self.guild = guild
         self.add_item(MemberSelect(guild))
-    @discord.ui.button(label="🔙 ย้อนกลับหน้าแรก", style=discord.ButtonStyle.secondary, emoji="⬅️")
+    @discord.ui.button(label="🔙 ย้อนกลับหน้าแรก", style=discord.ButtonStyle.secondary, emoji="⬅️", row=1)
     async def back(self, interaction: discord.Interaction, btn): 
         await interaction.message.edit(embed=generate_main_menu_embed(self.guild), view=BotControlMenuView(self.guild))
 
 class VoteKickTypeView(discord.ui.View):
-    def __init__(self, target, req_votes):
+    def __init__(self, target, req_votes, guild):
         super().__init__(timeout=60)
         self.target = target
         self.req = req_votes
+        self.guild = guild
+    
     @discord.ui.button(label="🔊 เตะออกจากห้องเสียง", style=discord.ButtonStyle.primary)
     async def vc_kick(self, interaction: discord.Interaction, btn):
         await interaction.response.defer()
-        try: 
-            await interaction.message.delete()
-        except: 
-            pass
-        await interaction.channel.send(embed=discord.Embed(title="🚨 เริ่มโหวตดีดสายออกจากห้องเสียง!"), view=VoteProgressView(self.target, "voice", self.req))
+        await interaction.message.edit(embed=discord.Embed(title="🚨 เริ่มโหวตดีดสายออกจากห้องเสียง!"), view=VoteProgressView(self.target, "voice", self.req, self.guild))
+        
     @discord.ui.button(label="💥 ดีดออกจากเซิร์ฟเวอร์", style=discord.ButtonStyle.danger)
     async def server_kick(self, interaction: discord.Interaction, btn):
         await interaction.response.defer()
-        try: 
-            await interaction.message.delete()
-        except: 
-            pass
-        await interaction.channel.send(embed=discord.Embed(title="🚨 เริ่มโหวตเตะออกจากเซิร์ฟเวอร์!"), view=VoteProgressView(self.target, "server", self.req))
+        await interaction.message.edit(embed=discord.Embed(title="🚨 เริ่มโหวตเตะออกจากเซิร์ฟเวอร์!"), view=VoteProgressView(self.target, "server", self.req, self.guild))
+    
+    # ✨ ปุ่มย้อนกลับหน้าแรกในหน้านี้
+    @discord.ui.button(label="🔙 ย้อนกลับหน้าแรก", style=discord.ButtonStyle.secondary, emoji="⬅️", row=1)
+    async def back(self, interaction: discord.Interaction, btn): 
+        await interaction.message.edit(embed=generate_main_menu_embed(self.guild), view=BotControlMenuView(self.guild))
 
 class VoteProgressView(discord.ui.View):
     def __init__(self, target, k_type, req):
