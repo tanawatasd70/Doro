@@ -963,7 +963,7 @@ async def on_message(message: discord.Message):
             await message.delete()
         except: 
             pass
-        await message.channel.send(embed=discord.Embed(title="🛡️ ระบบมอบยศกลุ่มอัจฉริยะ (UI High-Speed)", color=0x2ECC71), view=MultiRoleManagementView(message.guild))
+        await message.channel.send(embed=discord.Embed(title="🛡️ ระบบมอบยศกลุ่มอัจฉริยะค๊าาา ", color=0xFFB6C1), view=MultiRoleManagementView(message.guild))
         return
 
     if (f"doro ลบข้อความ" in lower_msg or f"doro clear" in lower_msg) and len(parts) >= 3:
