@@ -769,7 +769,7 @@ class VoteView(discord.ui.View):
 
     def create_embed(self):
         embed = discord.Embed(title=f"❓ โพล: {self.question}", color=0xFFB6C1)
-        embed.set_thumbnail(url="https://i.imgur.com/8Q5p7hD.png") # ไอคอนโพลน่ารักๆ
+        embed.set_thumbnail(url="https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcShUD65scpmSHOknkLq8Rglr702yQOys83d7wS8spbaLn5gru-98uG2mrgc&s=10") # ไอคอนโพลน่ารักๆ
         
         desc = "กดปุ่มด้านล่างเพื่อโหวตเลยค๊าา! 👇\n\n"
         for choice, count in self.choices.items():
