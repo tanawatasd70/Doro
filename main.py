@@ -278,6 +278,7 @@ class BotCommandControlSelect(discord.ui.Select):
         options = [
             discord.SelectOption(label="🏠 หน้าแรก / เคลียร์เมนูย่อย", description="กลับสู่หน้าจอเริ่มต้น ล้างหน้าต่างการทำงานด้านล่าง", value="main_menu"),
             discord.SelectOption(label="🎵 เปิดระบบควบคุมและเล่นเพลง", description="เข้าสู่หน้าต่างควบคุมมิวสิคบอร์ด เปิดเพลง/เลือกเพลงค๊าา", value="setup_music"),
+            discord.SelectOption(label="🔊 เปิดระบบ Soundboard", description="ปล่อยเสียงเอฟเฟกต์น่ารักๆ ในห้องเสียง", value="setup_soundboard"),
             discord.SelectOption(label="🧹 เปิดระบบล้างข้อความแชท", description="ลบข้อความขยะ/รีเซ็ตล้างห้องแชทให้เกลี้ยงในพริบตา", value="setup_clear"),
             discord.SelectOption(label="🛡️ เปิดระบบจัดการ/ขอยศ", description="เรียกเมนู Dropdown เลือกรับยศ และปุ่มขอยศสุดน่ารัก", value="setup_roles"),
             discord.SelectOption(label="📊 เปิดระบบสร้างคำถามโพล", description="สร้างโพลน่ารัก ๆ เพื่อโหวตเลือกคำตอบกันเถอะ", value="setup_poll"),
@@ -309,6 +310,9 @@ class BotCommandControlSelect(discord.ui.Select):
         elif value == "setup_roles":
             embed = discord.Embed(title="🛡️ ระบบจัดการยศอัตโนมัติค๊าา", description="คุณชอบยศไหนเลือกรับจากเมนูด้านล่างนี้ได้เลยนะค๊าา หรือจะกดปุ่มขอยศพิเศษพร้อมส่งเหตุผลอ้อน ๆ มาให้แอดมินดูก็ได้น้าา~ ✨", color=0xFFB6C1)
             await interaction.message.edit(embed=embed, view=RequestRoleView(current_guild))
+        elif value == "setup_soundboard":
+            embed = discord.Embed(title="🔊 ระบบเสียง Soundboard ของน้อง Doro", description="เลือกเสียงที่ต้องการปล่อยในห้องเสียงได้เลยค๊าา! ✨", color=0xF1C40F)
+            await interaction.message.edit(embed=embed, view=SoundboardView(current_guild))
         elif value == "setup_poll":
             embed = discord.Embed(title="📊 ระบบสร้างคำถามโพลระดมความคิดค๊าา", description="กรุณากรอกหัวข้อคำถาม และเลือกช่องทางปล่อยโพลให้ครบถ้วนด้านล่างนี้เลยน้าา~ ✨", color=0x9B59B6)
             await interaction.message.edit(embed=embed, view=AskQuestionView(current_guild))
@@ -833,6 +837,33 @@ class AskQuestionView(discord.ui.View):
     async def back(self, interaction: discord.Interaction, btn):
         await interaction.message.edit(embed=generate_main_menu_embed(self.guild), view=BotControlMenuView(self.guild))
 
+# ==========================================
+# 🔊 SOUNDBOARD SYSTEM
+# ==========================================
+class SoundboardView(discord.ui.View):
+    def __init__(self, guild):
+        super().__init__(timeout=None)
+        self.guild = guild
+        # คุณสามารถเปลี่ยนลิงก์ตรงนี้เป็น URL ไฟล์ MP3 ของคุณได้เลย
+        self.sounds = {
+            "ประมวลผล": "https://main-tan-yrmnml8s.edgeone.dev/u_39xav15uou-lightning-237994.mp3",
+            "อ้าาา": "https://various-salmon-mhnmnlfm.edgeone.dev/50986408-aa-with-reverb-meme-381632.mp3",
+            "ฟ้าร้อง": "https://unhappy-amethyst-otjoq89l.edgeone.dev/u_39xav15uou-lightning-237994.mp3"
+        }
+        for name, url in self.sounds.items():
+            btn = discord.ui.Button(label=name, style=discord.ButtonStyle.secondary, custom_id=url)
+            btn.callback = self.play_sound
+            self.add_item(btn)
+
+    async def play_sound(self, interaction: discord.Interaction):
+        if not interaction.user.voice:
+            return await interaction.response.send_message("❌ ต้องเข้าห้องเสียงก่อนน้าา!", ephemeral=True)
+        vc = self.guild.voice_client
+        if not vc:
+            vc = await interaction.user.voice.channel.connect()
+        source = discord.FFmpegPCMAudio(interaction.data['custom_id'])
+        vc.play(source)
+        await interaction.response.send_message(f"🔊 กำลังปล่อยเสียง {interaction.data['custom_id'].split('/')[-1]}...", ephemeral=True, delete_after=2)
 # ==========================================
 # 🚫 VOTE KICK SYSTEM COMPONENTS
 # ==========================================
