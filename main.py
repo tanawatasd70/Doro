@@ -738,16 +738,64 @@ class AskQuestionTextModal(discord.ui.Modal):
         self.parent_view.question_text = self.question.value.strip()
         self.parent_view.poll_choices = [c.strip() for c in self.choices_input.value.split(",") if c.strip()]
         await interaction.response.send_message("✏️ บันทึกโพลเรียบร้อย!", ephemeral=True)
-class VoteSelect(discord.ui.Select):
-    def __init__(self, choices, result_channel_id, all_choices):
-        super().__init__(placeholder="🗳️ กดโหวตคำตอบที่คุณชอบเลยน้าา...", options=[discord.SelectOption(label=o[:90]) for o in choices])
-        self.res_id = result_channel_id
-        self.all_choices = all_choices
-    async def callback(self, interaction: discord.Interaction):
-        p_id = interaction.message.id
-        u_votes = vote_records.setdefault(p_id, {})
-        u_votes[interaction.user.id] = self.values[0]
-        await interaction.response.send_message("✅ โหวตเสร็จสิ้น!", ephemeral=True, delete_after=2)
+# ==========================================
+# 📊 POLL SYSTEM COMPONENTS (BEAUTIFUL & INTERACTIVE)
+# ==========================================
+
+class VoteView(discord.ui.View):
+    def __init__(self, question, choices):
+        super().__init__(timeout=None)
+        self.question = question
+        self.choices = {choice: 0 for choice in choices}
+        self.total_votes = 0
+        self.voters = set()
+        
+        for choice in choices:
+            # สร้างปุ่มสำหรับแต่ละตัวเลือก
+            btn = discord.ui.Button(label=choice, style=discord.ButtonStyle.primary, custom_id=choice)
+            btn.callback = self.vote_callback
+            self.add_item(btn)
+
+    async def vote_callback(self, interaction: discord.Interaction):
+        if interaction.user.id in self.voters:
+            return await interaction.response.send_message("❌ คุณโหวตไปแล้วน้าา ห้ามโกงนะคะ! 🌸", ephemeral=True)
+        
+        self.voters.add(interaction.user.id)
+        self.choices[interaction.data['custom_id']] += 1
+        self.total_votes += 1
+        
+        # อัปเดต Embed ใหม่ทุกครั้งที่มีคนโหวต
+        await interaction.response.edit_message(embed=self.create_embed())
+
+    def create_embed(self):
+        embed = discord.Embed(title=f"❓ โพล: {self.question}", color=0xFFB6C1)
+        embed.set_thumbnail(url="https://i.imgur.com/8Q5p7hD.png") # ไอคอนโพลน่ารักๆ
+        
+        desc = "กดปุ่มด้านล่างเพื่อโหวตเลยค๊าา! 👇\n\n"
+        for choice, count in self.choices.items():
+            percent = (count / self.total_votes * 100) if self.total_votes > 0 else 0
+            # สร้าง Progress Bar แบบสวยงาม
+            bar_length = int(percent / 10)
+            bar = "█" * bar_length + "░" * (10 - bar_length)
+            desc += f"**{choice}**\n`{bar}` {percent:.1f}% ({count} คะแนน)\n\n"
+            
+        embed.description = desc
+        embed.set_footer(text=f"📊 ยอดผู้โหวตทั้งหมด: {self.total_votes} คน | Doro Bot 🐈‍⬛")
+        return embed
+
+class AskQuestionTextModal(discord.ui.Modal):
+    def __init__(self, parent_view):
+        super().__init__(title="✍️ ตั้งคำถามโพลแสนสนุก")
+        self.parent_view = parent_view
+        self.question = discord.ui.TextInput(label="หัวข้อโพล", placeholder="เช่น เย็นนี้กินอะไรดีคะ?")
+        self.choices_input = discord.ui.TextInput(label="ตัวเลือก (คั่นด้วยเครื่องหมาย ,)", style=discord.TextStyle.paragraph, placeholder="เช่น พิซซ่า, ชาบู, ข้าวมันไก่")
+        self.add_item(self.question)
+        self.add_item(self.choices_input)
+
+    async def on_submit(self, interaction: discord.Interaction):
+        self.parent_view.question_text = self.question.value.strip()
+        self.parent_view.poll_choices = [c.strip() for c in self.choices_input.value.split(",") if c.strip()]
+        await interaction.response.send_message("✅ บันทึกรายละเอียดโพลเรียบร้อย! กดปุ่ม 'ยืนยัน' เพื่อเริ่มโพลได้เลยค๊าา", ephemeral=True)
 
 class AskQuestionView(discord.ui.View):
     def __init__(self, guild):
@@ -756,38 +804,33 @@ class AskQuestionView(discord.ui.View):
         self.question_text = None
         self.poll_choices = []
         self.target_id = None
-        self.result_id = None
-        channels = [discord.SelectOption(label=f"#{ch.name}"[:40], value=str(ch.id)) for ch in guild.channels if isinstance(ch, discord.TextChannel)][:25]
-
-        self.s1 = discord.ui.Select(placeholder="📢 1. เลือกห้องที่จะปล่อยโพล", options=channels, row=0)
-        self.s2 = discord.ui.Select(placeholder="📊 2. เลือกห้องที่จะให้สรุปคะแนน", options=channels, row=1)
+        
+        # ดึงรายชื่อ Text Channel
+        channels = [discord.SelectOption(label=f"#{ch.name}", value=str(ch.id)) for ch in guild.text_channels][:25]
+        self.s1 = discord.ui.Select(placeholder="📢 เลือกห้องที่จะปล่อยโพล", options=channels)
         self.s1.callback = self.c1
-        self.s2.callback = self.c2
         self.add_item(self.s1)
-        self.add_item(self.s2)
 
-    async def c1(self, interaction): 
+    async def c1(self, interaction):
         self.target_id = int(self.s1.values[0])
-        await interaction.response.defer()
-    async def c2(self, interaction): 
-        self.result_id = int(self.s2.values[0])
-        await interaction.response.defer()
+        await interaction.response.send_message(f"📍 เลือกห้องเรียบร้อยค๊าา", ephemeral=True)
 
-    @discord.ui.button(label="✏️ กรอกคำถามโพล", style=discord.ButtonStyle.primary, row=2)
-    async def input_btn(self, interaction: discord.Interaction, btn): 
+    @discord.ui.button(label="✏️ กรอกคำถาม", style=discord.ButtonStyle.primary, row=1)
+    async def input_btn(self, interaction: discord.Interaction, btn):
         await interaction.response.send_modal(AskQuestionTextModal(self))
-    @discord.ui.button(label="🚀 ยืนยันปล่อยโพลเลย", style=discord.ButtonStyle.success, row=2)
+
+    @discord.ui.button(label="🚀 ยืนยันปล่อยโพล", style=discord.ButtonStyle.success, row=1)
     async def send_btn(self, interaction: discord.Interaction, btn):
-        if not self.question_text or not self.poll_choices or not self.target_id or not self.result_id: return
+        if not self.question_text or not self.poll_choices or not self.target_id:
+            return await interaction.response.send_message("❌ กรุณาเลือกห้องและตั้งคำถามก่อนน้าา!", ephemeral=True)
+        
         chan = self.guild.get_channel(self.target_id)
-        if chan:
-            v_view = discord.ui.View(timeout=None)
-            v_view.add_item(VoteSelect(self.poll_choices, self.result_id, self.poll_choices))
-            msg = await chan.send(embed=discord.Embed(title=f"❓ โพล: {self.question_text}", color=0xFFC0CB), view=v_view)
-            vote_records[msg.id] = {}
-            await interaction.response.send_message("✅ ปล่อยโพลสำเร็จค๊าา!", ephemeral=True)
-    @discord.ui.button(label="🔙 ย้อนกลับหน้าแรก", style=discord.ButtonStyle.secondary, emoji="⬅️", row=3)
-    async def back(self, interaction: discord.Interaction, btn): 
+        view = VoteView(self.question_text, self.poll_choices)
+        await chan.send(embed=view.create_embed(), view=view)
+        await interaction.response.send_message("🎉 ปล่อยโพลเรียบร้อยแล้วค๊าา!", ephemeral=True)
+
+    @discord.ui.button(label="🔙 ย้อนกลับ", style=discord.ButtonStyle.secondary, row=2)
+    async def back(self, interaction: discord.Interaction, btn):
         await interaction.message.edit(embed=generate_main_menu_embed(self.guild), view=BotControlMenuView(self.guild))
 
 # ==========================================
