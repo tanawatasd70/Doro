@@ -1171,6 +1171,99 @@ class GameCodeView(discord.ui.View):
         self.add_item(GameCodeSelect())
 
 
+# ------------------------------------------
+# 🛠️ ADMIN UI: เพิ่ม/ลบโค้ดสำรอง (แทนการพิมพ์คำสั่ง)
+# ------------------------------------------
+class AddCodeModal(discord.ui.Modal):
+    def __init__(self, game_key: str, game_label: str):
+        super().__init__(title=f"เพิ่มโค้ด — {game_label}"[:45])
+        self.game_key = game_key
+        self.code_input = discord.ui.TextInput(
+            label="โค้ด (Code)", placeholder="เช่น FREEBELI", max_length=100, required=True
+        )
+        self.desc_input = discord.ui.TextInput(
+            label="คำอธิบายรางวัล", placeholder="เช่น แลก 100 Beli ฟรี",
+            max_length=200, required=False, style=discord.TextStyle.short
+        )
+        self.add_item(self.code_input)
+        self.add_item(self.desc_input)
+
+    async def on_submit(self, interaction: discord.Interaction):
+        code = str(self.code_input.value).strip()
+        desc = str(self.desc_input.value).strip()
+        add_manual_code(self.game_key, code, desc)
+        await interaction.response.send_message(
+            f"✅ เพิ่มโค้ด `{code}` ให้เกม **{GAME_CODE_SOURCES[self.game_key]['label']}** เรียบร้อยค๊าา!",
+            ephemeral=True,
+        )
+
+
+class AddCodeGameSelect(discord.ui.Select):
+    def __init__(self):
+        options = [
+            discord.SelectOption(label=info["label"], value=key)
+            for key, info in GAME_CODE_SOURCES.items()
+        ]
+        super().__init__(placeholder="🎮 เลือกเกมที่จะเพิ่มโค้ดให้...", options=options)
+
+    async def callback(self, interaction: discord.Interaction):
+        game_key = self.values[0]
+        info = GAME_CODE_SOURCES[game_key]
+        await interaction.response.send_modal(AddCodeModal(game_key, info["label"]))
+
+
+class AddCodeAdminView(discord.ui.View):
+    def __init__(self):
+        super().__init__(timeout=120)
+        self.add_item(AddCodeGameSelect())
+
+
+class RemoveCodeGameSelect(discord.ui.Select):
+    def __init__(self):
+        options = [
+            discord.SelectOption(label=info["label"], value=key)
+            for key, info in GAME_CODE_SOURCES.items()
+        ]
+        super().__init__(placeholder="🎮 เลือกเกมที่จะลบโค้ด...", options=options)
+
+    async def callback(self, interaction: discord.Interaction):
+        game_key = self.values[0]
+        info = GAME_CODE_SOURCES[game_key]
+        entries = get_manual_codes(game_key)
+        if not entries:
+            return await interaction.response.send_message(
+                f"📭 เกม **{info['label']}** ยังไม่มีโค้ดสำรองเก็บไว้เลยค่ะ", ephemeral=True
+            )
+        await interaction.response.edit_message(
+            content=f"เลือกโค้ดที่จะลบออกจาก **{info['label']}**:",
+            view=RemoveCodePickView(game_key, entries),
+        )
+
+
+class RemoveCodePicker(discord.ui.Select):
+    def __init__(self, game_key: str, entries: list[tuple[str, str]]):
+        self.game_key = game_key
+        options = [discord.SelectOption(label=code[:100], description=desc[:100] or None) for code, desc in entries[:25]]
+        super().__init__(placeholder="🗑️ เลือกโค้ดที่จะลบ...", options=options)
+
+    async def callback(self, interaction: discord.Interaction):
+        code = self.values[0]
+        remove_manual_code(self.game_key, code)
+        await interaction.response.edit_message(content=f"🗑️ ลบโค้ด `{code}` แล้วค่ะ", view=None)
+
+
+class RemoveCodePickView(discord.ui.View):
+    def __init__(self, game_key: str, entries: list[tuple[str, str]]):
+        super().__init__(timeout=120)
+        self.add_item(RemoveCodePicker(game_key, entries))
+
+
+class RemoveCodeAdminView(discord.ui.View):
+    def __init__(self):
+        super().__init__(timeout=120)
+        self.add_item(RemoveCodeGameSelect())
+
+
 # ==========================================
 # ⚙️ CORE EVENTS & COMMANDS MAIN LOGIC
 # ==========================================
@@ -1223,14 +1316,26 @@ async def on_message(message: discord.Message):
         await message.channel.send(embed=embed, view=GameCodeView())
         return
 
-    if lower_msg.startswith("doro เพิ่มโค้ด"):
+    if lower_msg == "doro เพิ่มโค้ด":
+        if not message.author.guild_permissions.manage_guild:
+            return await message.channel.send("❌ ต้องมีสิทธิ์ Manage Server ถึงจะเพิ่มโค้ดได้ค่ะ")
+        embed = discord.Embed(
+            title="➕ เพิ่มโค้ดเกม (โหมดแอดมิน)",
+            description="เลือกเกมจากเมนูด้านล่าง แล้วจะมีป็อปอัปให้กรอกโค้ดกับคำอธิบายค่ะ",
+            color=0xFFB6C1,
+        )
+        await message.channel.send(embed=embed, view=AddCodeAdminView())
+        return
+
+    if lower_msg.startswith("doro เพิ่มโค้ด "):
         if not message.author.guild_permissions.manage_guild:
             return await message.channel.send("❌ ต้องมีสิทธิ์ Manage Server ถึงจะเพิ่มโค้ดได้ค่ะ")
         args = msg.split(maxsplit=3)[1:]  # ตัด "doro" ออก -> [เพิ่มโค้ด, game_key, code, desc...]
         if len(args) < 3:
             game_list = ", ".join(f"`{k}`" for k in GAME_CODE_SOURCES)
             return await message.channel.send(
-                f"❌ รูปแบบ: `doro เพิ่มโค้ด <game_key> <โค้ด> <คำอธิบาย>`\nเกมที่มีตอนนี้: {game_list}"
+                f"❌ รูปแบบ: `doro เพิ่มโค้ด <game_key> <โค้ด> <คำอธิบาย>`\nเกมที่มีตอนนี้: {game_list}\n"
+                f"หรือพิมพ์ `doro เพิ่มโค้ด` เฉยๆ เพื่อใช้เมนูแทนก็ได้ค่ะ"
             )
         game_key, code, desc = args[0], args[1], args[2]
         if game_key not in GAME_CODE_SOURCES:
@@ -1240,12 +1345,24 @@ async def on_message(message: discord.Message):
         await message.channel.send(f"✅ เพิ่มโค้ด `{code}` ให้เกม `{game_key}` เรียบร้อยค๊าา (ใช้เป็นสำรองตอนดึงเว็บไม่ได้)")
         return
 
-    if lower_msg.startswith("doro ลบโค้ด"):
+
+    if lower_msg == "doro ลบโค้ด":
+        if not message.author.guild_permissions.manage_guild:
+            return await message.channel.send("❌ ต้องมีสิทธิ์ Manage Server ถึงจะลบโค้ดได้ค่ะ")
+        embed = discord.Embed(
+            title="🗑️ ลบโค้ดเกม (โหมดแอดมิน)",
+            description="เลือกเกมก่อน แล้วค่อยเลือกโค้ดที่จะลบจากรายการค่ะ",
+            color=0xFFB6C1,
+        )
+        await message.channel.send(embed=embed, view=RemoveCodeAdminView())
+        return
+
+    if lower_msg.startswith("doro ลบโค้ด "):
         if not message.author.guild_permissions.manage_guild:
             return await message.channel.send("❌ ต้องมีสิทธิ์ Manage Server ถึงจะลบโค้ดได้ค่ะ")
         args = msg.split(maxsplit=3)[1:]  # [ลบโค้ด, game_key, code]
         if len(args) < 2:
-            return await message.channel.send("❌ รูปแบบ: `doro ลบโค้ด <game_key> <โค้ด>`")
+            return await message.channel.send("❌ รูปแบบ: `doro ลบโค้ด <game_key> <โค้ด>` หรือพิมพ์ `doro ลบโค้ด` เฉยๆ เพื่อใช้เมนู")
         game_key, code = args[0], args[1]
         if remove_manual_code(game_key, code):
             await message.channel.send(f"🗑️ ลบโค้ด `{code}` ออกจากเกม `{game_key}` แล้วค่ะ")
