@@ -1170,6 +1170,22 @@ class GameCodeView(discord.ui.View):
         super().__init__(timeout=120)
         self.add_item(GameCodeSelect())
 
+    @discord.ui.button(label="เพิ่มโค้ด", style=discord.ButtonStyle.success, emoji="➕", row=1)
+    async def add_code_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if not interaction.user.guild_permissions.manage_guild:
+            return await interaction.response.send_message("❌ ต้องมีสิทธิ์ Manage Server ถึงจะเพิ่มโค้ดได้ค่ะ", ephemeral=True)
+        await interaction.response.send_message(
+            "เลือกเกมที่จะเพิ่มโค้ดให้ค่ะ:", view=AddCodeAdminView(), ephemeral=True
+        )
+
+    @discord.ui.button(label="ลบโค้ด", style=discord.ButtonStyle.danger, emoji="🗑️", row=1)
+    async def remove_code_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if not interaction.user.guild_permissions.manage_guild:
+            return await interaction.response.send_message("❌ ต้องมีสิทธิ์ Manage Server ถึงจะลบโค้ดได้ค่ะ", ephemeral=True)
+        await interaction.response.send_message(
+            "เลือกเกมที่จะลบโค้ดออกค่ะ:", view=RemoveCodeAdminView(), ephemeral=True
+        )
+
 
 # ------------------------------------------
 # 🛠️ ADMIN UI: เพิ่ม/ลบโค้ดสำรอง (แทนการพิมพ์คำสั่ง)
@@ -1316,17 +1332,6 @@ async def on_message(message: discord.Message):
         await message.channel.send(embed=embed, view=GameCodeView())
         return
 
-    if lower_msg == "doro เพิ่มโค้ด":
-        if not message.author.guild_permissions.manage_guild:
-            return await message.channel.send("❌ ต้องมีสิทธิ์ Manage Server ถึงจะเพิ่มโค้ดได้ค่ะ")
-        embed = discord.Embed(
-            title="➕ เพิ่มโค้ดเกม (โหมดแอดมิน)",
-            description="เลือกเกมจากเมนูด้านล่าง แล้วจะมีป็อปอัปให้กรอกโค้ดกับคำอธิบายค่ะ",
-            color=0xFFB6C1,
-        )
-        await message.channel.send(embed=embed, view=AddCodeAdminView())
-        return
-
     if lower_msg.startswith("doro เพิ่มโค้ด "):
         if not message.author.guild_permissions.manage_guild:
             return await message.channel.send("❌ ต้องมีสิทธิ์ Manage Server ถึงจะเพิ่มโค้ดได้ค่ะ")
@@ -1335,7 +1340,7 @@ async def on_message(message: discord.Message):
             game_list = ", ".join(f"`{k}`" for k in GAME_CODE_SOURCES)
             return await message.channel.send(
                 f"❌ รูปแบบ: `doro เพิ่มโค้ด <game_key> <โค้ด> <คำอธิบาย>`\nเกมที่มีตอนนี้: {game_list}\n"
-                f"หรือพิมพ์ `doro เพิ่มโค้ด` เฉยๆ เพื่อใช้เมนูแทนก็ได้ค่ะ"
+                f"หรือพิมพ์ `doro โค้ด` แล้วกดปุ่ม ➕ เพิ่มโค้ด แทนก็ได้ค่ะ"
             )
         game_key, code, desc = args[0], args[1], args[2]
         if game_key not in GAME_CODE_SOURCES:
@@ -1346,23 +1351,12 @@ async def on_message(message: discord.Message):
         return
 
 
-    if lower_msg == "doro ลบโค้ด":
-        if not message.author.guild_permissions.manage_guild:
-            return await message.channel.send("❌ ต้องมีสิทธิ์ Manage Server ถึงจะลบโค้ดได้ค่ะ")
-        embed = discord.Embed(
-            title="🗑️ ลบโค้ดเกม (โหมดแอดมิน)",
-            description="เลือกเกมก่อน แล้วค่อยเลือกโค้ดที่จะลบจากรายการค่ะ",
-            color=0xFFB6C1,
-        )
-        await message.channel.send(embed=embed, view=RemoveCodeAdminView())
-        return
-
     if lower_msg.startswith("doro ลบโค้ด "):
         if not message.author.guild_permissions.manage_guild:
             return await message.channel.send("❌ ต้องมีสิทธิ์ Manage Server ถึงจะลบโค้ดได้ค่ะ")
         args = msg.split(maxsplit=3)[1:]  # [ลบโค้ด, game_key, code]
         if len(args) < 2:
-            return await message.channel.send("❌ รูปแบบ: `doro ลบโค้ด <game_key> <โค้ด>` หรือพิมพ์ `doro ลบโค้ด` เฉยๆ เพื่อใช้เมนู")
+            return await message.channel.send("❌ รูปแบบ: `doro ลบโค้ด <game_key> <โค้ด>` หรือพิมพ์ `doro โค้ด` แล้วกดปุ่ม 🗑️ ลบโค้ด แทนก็ได้ค่ะ")
         game_key, code = args[0], args[1]
         if remove_manual_code(game_key, code):
             await message.channel.send(f"🗑️ ลบโค้ด `{code}` ออกจากเกม `{game_key}` แล้วค่ะ")
