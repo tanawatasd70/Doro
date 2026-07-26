@@ -1181,7 +1181,11 @@ class GameCodeSelect(discord.ui.Select):
 class CopyCodeSelect(discord.ui.Select):
     def __init__(self, codes: list[tuple[str, str]]):
         options = [
-            discord.SelectOption(label=code[:100], description=(desc[:100] or None))
+            discord.SelectOption(
+                label=f"📋 คัดลอก: {code}"[:100],
+                value=code[:100],
+                description=(desc[:100] or None),
+            )
             for code, desc in codes[:25]
         ]
         super().__init__(placeholder="📋 เลือกโค้ดที่จะคัดลอก...", options=options, row=1)
