@@ -279,100 +279,188 @@ class BotCommandControlSelect(discord.ui.Select):
     def __init__(self):
         options = [
             discord.SelectOption(label="🏠 หน้าแรก / เคลียร์เมนูย่อย", description="กลับสู่หน้าจอเริ่มต้น ล้างหน้าต่างการทำงานด้านล่าง", value="main_menu"),
-            discord.SelectOption(label="🎵 เปิดระบบควบคุมและเล่นเพลง", description="เข้าสู่หน้าต่างควบคุมมิวสิคบอร์ด เปิดเพลง/เลือกเพลงค๊าา", value="setup_music"),
-            discord.SelectOption(label="🔊 เปิดระบบ Soundboard", description="ปล่อยเสียงเอฟเฟกต์น่ารักๆ ในห้องเสียง", value="setup_soundboard"),
-            discord.SelectOption(label="🧹 เปิดระบบล้างข้อความแชท", description="ลบข้อความขยะ/รีเซ็ตล้างห้องแชทให้เกลี้ยงในพริบตา", value="setup_clear"),
-            discord.SelectOption(label="🛡️ เปิดระบบจัดการ/ขอยศ", description="เรียกเมนู Dropdown เลือกรับยศ และปุ่มขอยศสุดน่ารัก", value="setup_roles"),
-            discord.SelectOption(label="📊 เปิดระบบสร้างคำถามโพล", description="สร้างโพลน่ารัก ๆ เพื่อโหวตเลือกคำตอบกันเถอะ", value="setup_poll"),
-            discord.SelectOption(label="🎮 รวมลิงก์ Private Server Roblox", description="คลังแสงลิงก์เซิร์ฟเวอร์วีเกมต่าง ๆ ของชาว Robloxค๊าา", value="roblox_servers"),
-            discord.SelectOption(label="🎁 เช็คโค้ดเกม Roblox", description="ดูโค้ดล่าสุดของเกมยอดฮิต พร้อมปุ่มคัดลอกโค้ด", value="game_codes"),
-            discord.SelectOption(label="🚫 เริ่มวาระโหวตเตะสมาชิก", description="เลือกคนที่ทำตัวไม่น่ารักเพื่อเริ่มโหวตเตะกันค่ะ!", value="setup_kick"),
-            discord.SelectOption(label="📊 ตรวจสอบข้อมูลสมาชิกกลุ่ม (NEW!)", description="เช็คสถิติแบบเรียลไทม์ ตรวจสอบแอดมิน และคนไม่มียศค๊าา", value="setup_analytics"),
-            discord.SelectOption(label="📖 ดูคู่มือคำสั่งบอททั้งหมด", description="มาดูคู่มือการสั่งงานและบันทึกความสามารถน้อน Doro กันงับ", value="show_commands")
         ]
-        super().__init__(placeholder="🎛️ หรือเลือกโหมดทำงานอื่น ๆ ของน้อน Doro ที่นี่...", min_values=1, max_values=1, options=options, custom_id="doro_main_control_select", row=0)
+        for key, cat in CATEGORY_REGISTRY.items():
+            options.append(discord.SelectOption(label=cat["label"], description=cat["description"], value=key))
+        super().__init__(placeholder="🎛️ เลือกหมวดหมู่การทำงานของน้อน Doro ที่นี่...", min_values=1, max_values=1, options=options, custom_id="doro_main_control_select", row=0)
+
     async def callback(self, interaction: discord.Interaction):
         await interaction.response.defer()
         value = self.values[0]
-        current_guild = interaction.guild
+        guild = interaction.guild
         if value == "main_menu":
-            embed = generate_main_menu_embed(current_guild)
-            await interaction.message.edit(embed=embed, view=BotControlMenuView(current_guild))
-        elif value == "setup_music":
-            embed = generate_main_menu_embed(current_guild)
-            await interaction.message.edit(embed=embed, view=MusicControlView(current_guild))
-        elif value == "setup_clear":
-            embed = discord.Embed(
-                title="🧹 ระบบจัดการและล้างข้อความในช่องแชท", 
-                description="คุณพี่ต้องการให้น้อน Doro จัดการช่องแชทนี้อย่างไรดีค๊าา?\n\n"
-                            "🔹 **ลบตามจำนวนล่าสุด**: กวาดล้างข้อความเก่าออกตามจำนวนที่เลือก\n"
-                            "⚠️ **รีเซ็ตห้องแชท (Nuke)**: ทำการโคลนและลบห้องเดิมทิ้งทันที เพื่อล้างประวัติแชททั้งหมดให้โล่ง 100% ค๊าา! *(ต้องการสิทธิ์จัดการช่องแชลเนล)*", 
-                color=0x34495E
+            embed = generate_main_menu_embed(guild)
+            await interaction.message.edit(embed=embed, view=BotControlMenuView(guild))
+            return
+        category = CATEGORY_REGISTRY.get(value)
+        if not category:
+            return
+        embed = discord.Embed(
+            title=category["label"],
+            description="เลือกฟังก์ชันที่ต้องการจากเมนูด้านล่างนี้ได้เลยค๊าา ✨",
+            color=0xFFB6C1,
+        )
+        await interaction.message.edit(embed=embed, view=CategoryMenuView(guild, value))
+
+
+class CategoryItemSelect(discord.ui.Select):
+    def __init__(self, category_key: str):
+        self.category_key = category_key
+        category = CATEGORY_REGISTRY[category_key]
+        options = [
+            discord.SelectOption(
+                label=ACTION_REGISTRY[item]["label"],
+                description=ACTION_REGISTRY[item]["description"],
+                value=item,
             )
-            await interaction.message.edit(embed=embed, view=ClearChannelView(current_guild))
-        elif value == "setup_roles":
-            embed = discord.Embed(title="🛡️ ระบบจัดการยศอัตโนมัติค๊าา", description="คุณชอบยศไหนเลือกรับจากเมนูด้านล่างนี้ได้เลยนะค๊าา หรือจะกดปุ่มขอยศพิเศษพร้อมส่งเหตุผลอ้อน ๆ มาให้แอดมินดูก็ได้น้าา~ ✨", color=0xFFB6C1)
-            await interaction.message.edit(embed=embed, view=RequestRoleView(current_guild))
-        elif value == "setup_soundboard":
-            embed = discord.Embed(title="🔊 ระบบเสียง Soundboard ของน้อง Doro", description="เลือกเสียงที่ต้องการปล่อยในห้องเสียงได้เลยค๊าา! ✨", color=0xF1C40F)
-            await interaction.message.edit(embed=embed, view=SoundboardView(current_guild))
-        elif value == "setup_poll":
-            embed = discord.Embed(title="📊 ระบบสร้างคำถามโพลระดมความคิดค๊าา", description="กรุณากรอกหัวข้อคำถาม และเลือกช่องทางปล่อยโพลให้ครบถ้วนด้านล่างนี้เลยน้าา~ ✨", color=0x9B59B6)
-            await interaction.message.edit(embed=embed, view=AskQuestionView(current_guild))
-        elif value == "roblox_servers":
-            embed = discord.Embed(title="🎮 คลังแสง Private Server ของแก๊งเรา! 🚀", description="อยากไปฟาร์ม ไปเวล หรือไปตึงเกมไหน เลือกชื่อเกมจากเมนูด้านล่างนี้ได้เลยค๊าา\n(สำหรับแอดมินสามารถกดปุ่มเพื่อเพิ่มหรือลบเกมได้เลยนะค๊าา) ✨", color=0x00E5FF)
-            await interaction.message.edit(embed=embed, view=RobloxServerView(current_guild))
-        elif value == "game_codes":
-            embed = discord.Embed(
-                title="🎮 ระบบเช็คโค้ดเกม Roblox",
-                description="เลือกเกมจากเมนูด้านล่างเลยค่ะ หนูจะไปหาโค้ดล่าสุดมาให้น้าา~ 🔍",
-                color=0xFFB6C1,
-            )
-            await interaction.message.edit(embed=embed, view=GameCodeView())
-        elif value == "setup_kick":
-            embed = discord.Embed(title="🚫 ระบบโหวตเตะสมาชิก (โหมด Doro เอาจริง!)", description="โปรดเลือกรายชื่อคนที่ไม่น่ารักที่คุณต้องการเริ่มโหวตลงมติเตะด้านล่างนี้ได้เลยค่ะงึมมม", color=discord.Color.red())
-            await interaction.message.edit(embed=embed, view=MemberSelectView(current_guild))
-        elif value == "setup_analytics":
-            embed = discord.Embed(title="📈 ศูนย์บริการข้อมูลสมาชิกเเละสถิติเชิงลึก", description="เลือกดูสถิติภาพรวม ตรวจสอบรายชื่อแอดมิน หรือค้นหาคนไร้ยศในเซิร์ฟเวอร์ได้เลยค๊าา ✨", color=0x2ECC71)
-            await interaction.message.edit(embed=embed, view=MemberAnalyticsView(current_guild))
-        elif value == "show_commands":
-            embed = discord.Embed(
-                title="📘 สมุดคู่มือและบันทึกความสามารถของน้อน Doro 🤖✨",
-                description=(
-                    "งื้อออ สวัสดีค่าา! หนูคือ **Doro** ยัยบอทสุดน่ารักที่จะมาช่วยดูแลและสร้างสีสันให้เซิร์ฟเวอร์ของทุกคนค๊าา 💕 หนูทำอะไรได้เยอะแยะเลยนะ ลองมาดูกันเยย! \n\n"
-                    "**🐈‍⬛ ความสามารถหลักของหนู (ฟังก์ชันเด่น):**\n"
-                    "* **🎛️ แผงควบคุม UI อัจฉริยะ**: กดสั่งงานง่าย ๆ ผ่านปุ่มและเมนู Dropdown ไม่ต้องพิมพ์คำสั่งให้เหนื่อยค๊าา\n"
-                    "* **🎵 มิวสิคบอร์ดแยกแท็บ**: เข้าหน้าต่างควบคุมเพลงและคิวได้แบบเป็นสัดส่วนผ่าน Dropdown\n"
-                    "* **🧹 ระบบล้างแชทและรีเซ็ตห้อง**: สั่งกวาดล้างข้อความขยะ หรือล้างห้องแชทให้ขาวสะอาด 100% ด้วยปุ่ม Nuke\n"
-                    "* **🛡️ ระบบแจกและขอยศสุดตึง**: เลือกรับยศเอง หรือส่งคำขออ้อน ๆ มาขอยศพิเศษก็ได้น้าา\n"
-                    "* **📊 โพลระดมความคิด**: สร้างคำถามและส่งไปห้องที่ต้องการ พร้อมระบบนับคะแนนเรียลไทม์\n"
-                    "* **🎮 คลังแสงเซิร์ฟ Roblox**: รวมลิงก์ตั๋วเข้า Private Server เกมโปรดของแก๊งเราไว้ที่เดียว\n"
-                    "* **🚫 ศาลเตี้ยโหวตเตะ**: เปิดวาระโหวตลงมติเพื่อดีดออกจากห้องเสียงหรือเซิร์ฟเวอร์\n"
-                    "* **📊 ระบบตรวจสอบสมาชิก (Analytics)**: เช็คสถิติแบบเรียลไทม์ ตรวจดูทีมงาน และค้นหาคนไร้ยศ\n\n"
-                    "--------------------------------------------------\n"
-                    "**✍️ สรุปคำสั่งพิมพ์ด่วน (Quick Commands):**\n"
-                    "🔹 **`doro เมนู` / `doro menu` / `doro คำสั่งเพลง`** : เรียกเปิดแผงควบคุมระบบ UI ทั้งหมดค๊าา\n"
-                    "🔹 **`doro ให้ยศ` / `doro addrole`** : หน้าต่างด่วนสำหรับแอดมินแจกยศกลุ่มความเร็วสูง\n"
-                    "🔹 **`doro ลบข้อความ <จำนวน>`** : สั่งเคลียร์ข้อความขยะในห้องแชท\n"
-                    "🔹 **`doro เล่น <ชื่อเพลง/ลิงก์>`** : สั่งน้อน Doro ดำน้ำไปเปิดเพลงค๊าา 🎵\n"
-                    "🔹 **`doro สร้างปุ่มรับยศ`** : สั่งเปิดแผงตั้งค่า UI สร้างระบบรับยศแมวทมิฬกล่องสีดำสุดเท่ 🖤"
-                ),
-                color=discord.Color.magenta()
-            )
-            await interaction.message.edit(embed=embed, view=BackToMainOnlyView(current_guild))
+            for item in category["items"]
+        ]
+        super().__init__(placeholder="👉 เลือกฟังก์ชันที่ต้องการค๊าา...", min_values=1, max_values=1, options=options, row=0)
+
+    async def callback(self, interaction: discord.Interaction):
+        await interaction.response.defer()
+        action = ACTION_REGISTRY.get(self.values[0])
+        if not action:
+            return
+        embed, view = action["build"](interaction.guild)
+        await interaction.message.edit(embed=embed, view=view)
+
+
+class CategoryMenuView(discord.ui.View):
+    def __init__(self, guild, category_key: str):
+        super().__init__(timeout=None)
+        self.guild = guild
+        self.add_item(CategoryItemSelect(category_key))
+
+    @discord.ui.button(label="กลับหมวดหมู่", style=discord.ButtonStyle.secondary, emoji="↩️", row=1)
+    async def back_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.defer()
+        embed = generate_main_menu_embed(self.guild)
+        await interaction.message.edit(embed=embed, view=BotControlMenuView(self.guild))
+
+
 class BotControlMenuView(discord.ui.View):
     def __init__(self, guild):
         super().__init__(timeout=None)
         self.guild = guild
         self.add_item(BotCommandControlSelect())
 
-    @discord.ui.button(label="❌ ปิดแผงควบคุม", style=discord.ButtonStyle.danger, emoji="🔴", row=1)
+    # ปุ่มลัดสำหรับฟังก์ชันที่ใช้บ่อยที่สุด กดใช้งานได้ทันทีไม่ต้องผ่าน dropdown
+    @discord.ui.button(label="เพลง", style=discord.ButtonStyle.primary, emoji="🎵", row=1)
+    async def quick_music_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.defer()
+        embed, view = ACTION_REGISTRY["setup_music"]["build"](self.guild)
+        await interaction.message.edit(embed=embed, view=view)
+
+    @discord.ui.button(label="ล้างแชท", style=discord.ButtonStyle.secondary, emoji="🧹", row=1)
+    async def quick_clear_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.defer()
+        embed, view = ACTION_REGISTRY["setup_clear"]["build"](self.guild)
+        await interaction.message.edit(embed=embed, view=view)
+
+    @discord.ui.button(label="❌ ปิดแผงควบคุม", style=discord.ButtonStyle.danger, emoji="🔴", row=2)
     async def cancel_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         await interaction.response.defer()
         try:
             await interaction.message.delete()
         except:
             pass
+
+
+# --- ฟังก์ชันสร้าง embed/view ของแต่ละฟังก์ชันย่อย (dispatch table แทน if/elif ยาว ๆ) ---
+
+def _build_music_view(guild):
+    return generate_main_menu_embed(guild), MusicControlView(guild)
+
+def _build_soundboard_view(guild):
+    embed = discord.Embed(title="🔊 ระบบเสียง Soundboard ของน้อง Doro", description="เลือกเสียงที่ต้องการปล่อยในห้องเสียงได้เลยค๊าา! ✨", color=0xF1C40F)
+    return embed, SoundboardView(guild)
+
+def _build_clear_view(guild):
+    embed = discord.Embed(
+        title="🧹 ระบบจัดการและล้างข้อความในช่องแชท",
+        description="คุณพี่ต้องการให้น้อน Doro จัดการช่องแชทนี้อย่างไรดีค๊าา?\n\n"
+                    "🔹 **ลบตามจำนวนล่าสุด**: กวาดล้างข้อความเก่าออกตามจำนวนที่เลือก\n"
+                    "⚠️ **รีเซ็ตห้องแชท (Nuke)**: ทำการโคลนและลบห้องเดิมทิ้งทันที เพื่อล้างประวัติแชททั้งหมดให้โล่ง 100% ค๊าา! *(ต้องการสิทธิ์จัดการช่องแชลเนล)*",
+        color=0x34495E
+    )
+    return embed, ClearChannelView(guild)
+
+def _build_roles_view(guild):
+    embed = discord.Embed(title="🛡️ ระบบจัดการยศอัตโนมัติค๊าา", description="คุณชอบยศไหนเลือกรับจากเมนูด้านล่างนี้ได้เลยนะค๊าา หรือจะกดปุ่มขอยศพิเศษพร้อมส่งเหตุผลอ้อน ๆ มาให้แอดมินดูก็ได้น้าา~ ✨", color=0xFFB6C1)
+    return embed, RequestRoleView(guild)
+
+def _build_poll_view(guild):
+    embed = discord.Embed(title="📊 ระบบสร้างคำถามโพลระดมความคิดค๊าา", description="กรุณากรอกหัวข้อคำถาม และเลือกช่องทางปล่อยโพลให้ครบถ้วนด้านล่างนี้เลยน้าา~ ✨", color=0x9B59B6)
+    return embed, AskQuestionView(guild)
+
+def _build_roblox_view(guild):
+    embed = discord.Embed(title="🎮 คลังแสง Private Server ของแก๊งเรา! 🚀", description="อยากไปฟาร์ม ไปเวล หรือไปตึงเกมไหน เลือกชื่อเกมจากเมนูด้านล่างนี้ได้เลยค๊าา\n(สำหรับแอดมินสามารถกดปุ่มเพื่อเพิ่มหรือลบเกมได้เลยนะค๊าา) ✨", color=0x00E5FF)
+    return embed, RobloxServerView(guild)
+
+def _build_game_codes_view(guild):
+    embed = discord.Embed(
+        title="🎮 ระบบเช็คโค้ดเกม Roblox",
+        description="เลือกเกมจากเมนูด้านล่างเลยค่ะ หนูจะไปหาโค้ดล่าสุดมาให้น้าา~ 🔍",
+        color=0xFFB6C1,
+    )
+    return embed, GameCodeView()
+
+def _build_kick_view(guild):
+    embed = discord.Embed(title="🚫 ระบบโหวตเตะสมาชิก (โหมด Doro เอาจริง!)", description="โปรดเลือกรายชื่อคนที่ไม่น่ารักที่คุณต้องการเริ่มโหวตลงมติเตะด้านล่างนี้ได้เลยค่ะงึมมม", color=discord.Color.red())
+    return embed, MemberSelectView(guild)
+
+def _build_analytics_view(guild):
+    embed = discord.Embed(title="📈 ศูนย์บริการข้อมูลสมาชิกเเละสถิติเชิงลึก", description="เลือกดูสถิติภาพรวม ตรวจสอบรายชื่อแอดมิน หรือค้นหาคนไร้ยศในเซิร์ฟเวอร์ได้เลยค๊าา ✨", color=0x2ECC71)
+    return embed, MemberAnalyticsView(guild)
+
+def _build_help_view(guild):
+    embed = discord.Embed(
+        title="📘 สมุดคู่มือและบันทึกความสามารถของน้อน Doro 🤖✨",
+        description=(
+            "งื้อออ สวัสดีค่าา! หนูคือ **Doro** ยัยบอทสุดน่ารักที่จะมาช่วยดูแลและสร้างสีสันให้เซิร์ฟเวอร์ของทุกคนค๊าา 💕 หนูทำอะไรได้เยอะแยะเลยนะ ลองมาดูกันเยย! \n\n"
+            "**🐈‍⬛ ความสามารถหลักของหนู (ฟังก์ชันเด่น):**\n"
+            "* **🎛️ แผงควบคุม UI อัจฉริยะ**: กดสั่งงานง่าย ๆ ผ่านปุ่มและเมนู Dropdown ไม่ต้องพิมพ์คำสั่งให้เหนื่อยค๊าา\n"
+            "* **🎵 มิวสิคบอร์ดแยกแท็บ**: เข้าหน้าต่างควบคุมเพลงและคิวได้แบบเป็นสัดส่วนผ่าน Dropdown\n"
+            "* **🧹 ระบบล้างแชทและรีเซ็ตห้อง**: สั่งกวาดล้างข้อความขยะ หรือล้างห้องแชทให้ขาวสะอาด 100% ด้วยปุ่ม Nuke\n"
+            "* **🛡️ ระบบแจกและขอยศสุดตึง**: เลือกรับยศเอง หรือส่งคำขออ้อน ๆ มาขอยศพิเศษก็ได้น้าา\n"
+            "* **📊 โพลระดมความคิด**: สร้างคำถามและส่งไปห้องที่ต้องการ พร้อมระบบนับคะแนนเรียลไทม์\n"
+            "* **🎮 คลังแสงเซิร์ฟ Roblox**: รวมลิงก์ตั๋วเข้า Private Server เกมโปรดของแก๊งเราไว้ที่เดียว\n"
+            "* **🚫 ศาลเตี้ยโหวตเตะ**: เปิดวาระโหวตลงมติเพื่อดีดออกจากห้องเสียงหรือเซิร์ฟเวอร์\n"
+            "* **📊 ระบบตรวจสอบสมาชิก (Analytics)**: เช็คสถิติแบบเรียลไทม์ ตรวจดูทีมงาน และค้นหาคนไร้ยศ\n\n"
+            "--------------------------------------------------\n"
+            "**✍️ สรุปคำสั่งพิมพ์ด่วน (Quick Commands):**\n"
+            "🔹 **`doro เมนู` / `doro menu` / `doro คำสั่งเพลง` / `/menu`** : เรียกเปิดแผงควบคุมระบบ UI ทั้งหมดค๊าา\n"
+            "🔹 **`doro ให้ยศ` / `doro addrole`** : หน้าต่างด่วนสำหรับแอดมินแจกยศกลุ่มความเร็วสูง\n"
+            "🔹 **`doro ลบข้อความ <จำนวน>`** : สั่งเคลียร์ข้อความขยะในห้องแชท\n"
+            "🔹 **`doro เล่น <ชื่อเพลง/ลิงก์>`** : สั่งน้อน Doro ดำน้ำไปเปิดเพลงค๊าา 🎵\n"
+            "🔹 **`doro สร้างปุ่มรับยศ`** : สั่งเปิดแผงตั้งค่า UI สร้างระบบรับยศแมวทมิฬกล่องสีดำสุดเท่ 🖤"
+        ),
+        color=discord.Color.magenta()
+    )
+    return embed, BackToMainOnlyView(guild)
+
+
+ACTION_REGISTRY = {
+    "setup_music": {"label": "🎵 เปิดระบบควบคุมและเล่นเพลง", "description": "เข้าสู่หน้าต่างควบคุมมิวสิคบอร์ด เปิดเพลง/เลือกเพลงค๊าา", "build": _build_music_view},
+    "setup_soundboard": {"label": "🔊 เปิดระบบ Soundboard", "description": "ปล่อยเสียงเอฟเฟกต์น่ารักๆ ในห้องเสียง", "build": _build_soundboard_view},
+    "setup_clear": {"label": "🧹 เปิดระบบล้างข้อความแชท", "description": "ลบข้อความขยะ/รีเซ็ตล้างห้องแชทให้เกลี้ยงในพริบตา", "build": _build_clear_view},
+    "setup_roles": {"label": "🛡️ เปิดระบบจัดการ/ขอยศ", "description": "เรียกเมนู Dropdown เลือกรับยศ และปุ่มขอยศสุดน่ารัก", "build": _build_roles_view},
+    "setup_poll": {"label": "📊 เปิดระบบสร้างคำถามโพล", "description": "สร้างโพลน่ารัก ๆ เพื่อโหวตเลือกคำตอบกันเถอะ", "build": _build_poll_view},
+    "roblox_servers": {"label": "🎮 รวมลิงก์ Private Server Roblox", "description": "คลังแสงลิงก์เซิร์ฟเวอร์วีเกมต่าง ๆ ของชาว Robloxค๊าา", "build": _build_roblox_view},
+    "game_codes": {"label": "🎁 เช็คโค้ดเกม Roblox", "description": "ดูโค้ดล่าสุดของเกมยอดฮิต พร้อมปุ่มคัดลอกโค้ด", "build": _build_game_codes_view},
+    "setup_kick": {"label": "🚫 เริ่มวาระโหวตเตะสมาชิก", "description": "เลือกคนที่ทำตัวไม่น่ารักเพื่อเริ่มโหวตเตะกันค่ะ!", "build": _build_kick_view},
+    "setup_analytics": {"label": "📊 ตรวจสอบข้อมูลสมาชิกกลุ่ม (NEW!)", "description": "เช็คสถิติแบบเรียลไทม์ ตรวจสอบแอดมิน และคนไม่มียศค๊าา", "build": _build_analytics_view},
+    "show_commands": {"label": "📖 ดูคู่มือคำสั่งบอททั้งหมด", "description": "มาดูคู่มือการสั่งงานและบันทึกความสามารถน้อน Doro กันงับ", "build": _build_help_view},
+}
+
+CATEGORY_REGISTRY = {
+    "cat_music": {"label": "🎵 บันเทิง", "description": "เพลง และ Soundboard", "items": ["setup_music", "setup_soundboard"]},
+    "cat_manage": {"label": "🛡️ จัดการเซิร์ฟเวอร์", "description": "ล้างแชท / ยศ / โหวตเตะสมาชิก", "items": ["setup_clear", "setup_roles", "setup_kick"]},
+    "cat_info": {"label": "📊 ข้อมูล & โพล", "description": "สร้างโพล และเช็คสถิติสมาชิก", "items": ["setup_poll", "setup_analytics"]},
+    "cat_roblox": {"label": "🎮 Roblox", "description": "ลิงก์เซิร์ฟและโค้ดเกม", "items": ["roblox_servers", "game_codes"]},
+    "cat_help": {"label": "📖 คู่มือคำสั่ง", "description": "ดูคู่มือความสามารถของ Doro", "items": ["show_commands"]},
+}
 def generate_main_menu_embed(guild):
     guild_id = guild.id
     song = current_songs.get(guild_id)
@@ -891,7 +979,7 @@ class MemberSelect(discord.ui.UserSelect):
 
 class MemberSelectView(discord.ui.View):
     def __init__(self, guild): 
-        super().__init__(timeout=60)
+        super().__init__(timeout=None)
         self.guild = guild
         self.add_item(MemberSelect(guild))
     @discord.ui.button(label="🔙 ย้อนกลับหน้าแรก", style=discord.ButtonStyle.secondary, emoji="⬅️", row=1)
@@ -1197,7 +1285,7 @@ class CopyCodeSelect(discord.ui.Select):
 
 class GameCodeView(discord.ui.View):
     def __init__(self):
-        super().__init__(timeout=120)
+        super().__init__(timeout=None)
         self.add_item(GameCodeSelect())
 
     @discord.ui.button(label="เพิ่มโค้ด", style=discord.ButtonStyle.success, emoji="➕", row=2)
@@ -1352,7 +1440,20 @@ async def on_ready():
             pass
     refresh_main_menu_msg = _refresh
     bot.add_view(DynamicGroupJoinView(role_id=0, emoji_str="🌸"))
+    try:
+        synced = await bot.tree.sync()
+        logger.info(f"Synced {len(synced)} slash command(s)")
+    except Exception as e:
+        logger.warning(f"Slash command sync failed: {type(e).__name__}: {e}")
     logger.info(f"Doro COMPLETELY SUPER POWERED IS RUNNING AS {bot.user}")
+
+
+@bot.tree.command(name="menu", description="เปิดแผงควบคุมระบบ UI ของน้อน Doro")
+async def slash_menu(interaction: discord.Interaction):
+    await interaction.response.send_message(
+        embed=generate_main_menu_embed(interaction.guild),
+        view=BotControlMenuView(interaction.guild),
+    )
 @bot.event
 async def on_message(message: discord.Message):
     if message.author.bot: return
