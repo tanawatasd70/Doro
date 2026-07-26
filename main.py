@@ -980,10 +980,10 @@ class MultiRoleManagementView(discord.ui.View):
         await interaction.channel.send("🛡️ มอบยศกลุ่มความเร็วสูงเสร็จเรียบร้อยค๊าา!", delete_after=10)
 
 # ==========================================
-# 🎮 ROBLOX GAME CODES (LIVE FETCH)
+# 🎮 ROBLOX GAME CODES (LIVE FETCH + MANUAL FALLBACK)
 # ==========================================
-# แหล่งข้อมูล: progameguides.com — อัปเดตโค้ดทุกวัน แต่ถ้าเว็บเปลี่ยนโครงสร้าง
-# HTML อาจต้องปรับ selector ใน parse_codes_from_html() ใหม่
+# แหล่งข้อมูลหลัก: progameguides.com — ถ้าโดนเว็บบล็อก (403/timeout ฯลฯ)
+# ระบบจะ fallback ไปใช้โค้ดที่แอดมินเก็บไว้ในไฟล์ manual_codes.json แทน
 GAME_CODE_SOURCES = {
     "blox_fruits": {
         "label": "🍈 Blox Fruits",
@@ -1013,8 +1013,54 @@ GAME_CODE_SOURCES = {
 
 CODE_FETCH_HEADERS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
-                  "(KHTML, like Gecko) Chrome/124.0 Safari/537.36"
+                  "(KHTML, like Gecko) Chrome/124.0 Safari/537.36",
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+    "Accept-Language": "en-US,en;q=0.9,th;q=0.8",
 }
+
+MANUAL_CODES_FILE = "manual_codes.json"
+
+
+def load_manual_codes() -> dict:
+    try:
+        with open(MANUAL_CODES_FILE, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except FileNotFoundError:
+        return {}
+
+
+def save_manual_codes(data: dict):
+    with open(MANUAL_CODES_FILE, "w", encoding="utf-8") as f:
+        json.dump(data, f, indent=4, ensure_ascii=False)
+
+
+def get_manual_codes(game_key: str) -> list[tuple[str, str]]:
+    data = load_manual_codes()
+    entries = data.get(game_key, [])
+    return [(e.get("code", ""), e.get("desc", "")) for e in entries if e.get("code")]
+
+
+def add_manual_code(game_key: str, code: str, desc: str):
+    data = load_manual_codes()
+    entries = data.setdefault(game_key, [])
+    for e in entries:
+        if e.get("code", "").lower() == code.lower():
+            e["desc"] = desc
+            save_manual_codes(data)
+            return
+    entries.append({"code": code, "desc": desc})
+    save_manual_codes(data)
+
+
+def remove_manual_code(game_key: str, code: str) -> bool:
+    data = load_manual_codes()
+    entries = data.get(game_key, [])
+    new_entries = [e for e in entries if e.get("code", "").lower() != code.lower()]
+    if len(new_entries) == len(entries):
+        return False
+    data[game_key] = new_entries
+    save_manual_codes(data)
+    return True
 
 
 def parse_codes_from_html(html: str) -> list[tuple[str, str]]:
@@ -1052,7 +1098,7 @@ async def fetch_game_codes(url: str) -> list[tuple[str, str]]:
     return parse_codes_from_html(html)
 
 
-def build_codes_embed(game_label: str, source_url: str, codes: list[tuple[str, str]]) -> discord.Embed:
+def build_codes_embed(game_label: str, source_url: str, codes: list[tuple[str, str]], from_manual: bool = False) -> discord.Embed:
     if not codes:
         embed = discord.Embed(
             title=f"📭 {game_label} — ยังไม่มีโค้ดที่ใช้งานได้ตอนนี้",
@@ -1073,7 +1119,9 @@ def build_codes_embed(game_label: str, source_url: str, codes: list[tuple[str, s
         description="\n".join(lines),
         color=0x77DD77,
     )
-    embed.set_footer(text=f"อัปเดตล่าสุดจาก progameguides.com • ทั้งหมด {len(codes)} โค้ด")
+    footer = f"ทั้งหมด {len(codes)} โค้ด"
+    footer += " • มาจากรายการที่แอดมินอัปเดตไว้ (ดึงจากเว็บไม่ได้ตอนนี้)" if from_manual else " • อัปเดตล่าสุดจาก progameguides.com"
+    embed.set_footer(text=footer)
     return embed
 
 
@@ -1089,17 +1137,32 @@ class GameCodeSelect(discord.ui.Select):
         await interaction.response.defer()
         game_key = self.values[0]
         info = GAME_CODE_SOURCES[game_key]
+
+        codes: list[tuple[str, str]] = []
+        from_manual = False
         try:
             codes = await fetch_game_codes(info["url"])
-            embed = build_codes_embed(info["label"], info["url"], codes)
+            if not codes:
+                raise ValueError("no codes parsed from page")
         except Exception as e:
-            logger.warning(f"fetch_game_codes failed for {game_key}: {e}")
-            embed = discord.Embed(
-                title="❌ ดึงโค้ดไม่สำเร็จ",
-                description="งื้อออ ตอนนี้หนูดึงข้อมูลจากเว็บไม่ได้ค่ะ ลองใหม่อีกครั้งทีหลังน้าา",
-                color=0xFF6961,
-            )
-        await interaction.message.edit(embed=embed, view=GameCodeView())
+            error_detail = f"{type(e).__name__}: {e}"
+            logger.warning(f"fetch_game_codes failed for {game_key}: {error_detail}")
+            print(f"[CODE FETCH ERROR] {game_key}: {error_detail}", flush=True)
+            codes = get_manual_codes(game_key)
+            from_manual = True
+
+        embed = build_codes_embed(info["label"], info["url"], codes, from_manual=from_manual)
+
+        try:
+            await interaction.message.edit(embed=embed, view=GameCodeView())
+        except Exception as e:
+            edit_error = f"{type(e).__name__}: {e}"
+            logger.warning(f"message.edit failed for {game_key}: {edit_error}")
+            print(f"[MESSAGE EDIT ERROR] {game_key}: {edit_error}", flush=True)
+            try:
+                await interaction.followup.send(embed=embed, ephemeral=True)
+            except Exception:
+                pass
 
 
 class GameCodeView(discord.ui.View):
@@ -1158,6 +1221,36 @@ async def on_message(message: discord.Message):
             color=0xFFB6C1,
         )
         await message.channel.send(embed=embed, view=GameCodeView())
+        return
+
+    if lower_msg.startswith("doro เพิ่มโค้ด"):
+        if not message.author.guild_permissions.manage_guild:
+            return await message.channel.send("❌ ต้องมีสิทธิ์ Manage Server ถึงจะเพิ่มโค้ดได้ค่ะ")
+        args = msg.split(maxsplit=3)[1:]  # ตัด "doro" ออก -> [เพิ่มโค้ด, game_key, code, desc...]
+        if len(args) < 3:
+            game_list = ", ".join(f"`{k}`" for k in GAME_CODE_SOURCES)
+            return await message.channel.send(
+                f"❌ รูปแบบ: `doro เพิ่มโค้ด <game_key> <โค้ด> <คำอธิบาย>`\nเกมที่มีตอนนี้: {game_list}"
+            )
+        game_key, code, desc = args[0], args[1], args[2]
+        if game_key not in GAME_CODE_SOURCES:
+            game_list = ", ".join(f"`{k}`" for k in GAME_CODE_SOURCES)
+            return await message.channel.send(f"❌ ไม่รู้จักเกม `{game_key}` ค่ะ ใช้ได้แค่: {game_list}")
+        add_manual_code(game_key, code, desc)
+        await message.channel.send(f"✅ เพิ่มโค้ด `{code}` ให้เกม `{game_key}` เรียบร้อยค๊าา (ใช้เป็นสำรองตอนดึงเว็บไม่ได้)")
+        return
+
+    if lower_msg.startswith("doro ลบโค้ด"):
+        if not message.author.guild_permissions.manage_guild:
+            return await message.channel.send("❌ ต้องมีสิทธิ์ Manage Server ถึงจะลบโค้ดได้ค่ะ")
+        args = msg.split(maxsplit=3)[1:]  # [ลบโค้ด, game_key, code]
+        if len(args) < 2:
+            return await message.channel.send("❌ รูปแบบ: `doro ลบโค้ด <game_key> <โค้ด>`")
+        game_key, code = args[0], args[1]
+        if remove_manual_code(game_key, code):
+            await message.channel.send(f"🗑️ ลบโค้ด `{code}` ออกจากเกม `{game_key}` แล้วค่ะ")
+        else:
+            await message.channel.send(f"❌ หาโค้ด `{code}` ในเกม `{game_key}` ไม่เจอค่ะ")
         return
 
     if (f"doro ลบข้อความ" in lower_msg or f"doro clear" in lower_msg) and len(parts) >= 3:
