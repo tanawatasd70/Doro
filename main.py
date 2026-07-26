@@ -1152,9 +1152,10 @@ class GameCodeSelect(discord.ui.Select):
             from_manual = True
 
         embed = build_codes_embed(info["label"], info["url"], codes, from_manual=from_manual)
+        new_view = GameCodeResultView(codes[:20])
 
         try:
-            await interaction.message.edit(embed=embed, view=GameCodeView())
+            await interaction.message.edit(embed=embed, view=new_view)
         except Exception as e:
             edit_error = f"{type(e).__name__}: {e}"
             logger.warning(f"message.edit failed for {game_key}: {edit_error}")
@@ -1165,12 +1166,25 @@ class GameCodeSelect(discord.ui.Select):
                 pass
 
 
+class CopyCodeSelect(discord.ui.Select):
+    def __init__(self, codes: list[tuple[str, str]]):
+        options = [
+            discord.SelectOption(label=code[:100], description=(desc[:100] or None))
+            for code, desc in codes[:25]
+        ]
+        super().__init__(placeholder="📋 เลือกโค้ดที่จะคัดลอก...", options=options, row=1)
+
+    async def callback(self, interaction: discord.Interaction):
+        code = self.values[0]
+        await interaction.response.send_message(f"`{code}`", ephemeral=True)
+
+
 class GameCodeView(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=120)
         self.add_item(GameCodeSelect())
 
-    @discord.ui.button(label="เพิ่มโค้ด", style=discord.ButtonStyle.success, emoji="➕", row=1)
+    @discord.ui.button(label="เพิ่มโค้ด", style=discord.ButtonStyle.success, emoji="➕", row=2)
     async def add_code_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
         if not interaction.user.guild_permissions.manage_guild:
             return await interaction.response.send_message("❌ ต้องมีสิทธิ์ Manage Server ถึงจะเพิ่มโค้ดได้ค่ะ", ephemeral=True)
@@ -1178,13 +1192,21 @@ class GameCodeView(discord.ui.View):
             "เลือกเกมที่จะเพิ่มโค้ดให้ค่ะ:", view=AddCodeAdminView(), ephemeral=True
         )
 
-    @discord.ui.button(label="ลบโค้ด", style=discord.ButtonStyle.danger, emoji="🗑️", row=1)
+    @discord.ui.button(label="ลบโค้ด", style=discord.ButtonStyle.danger, emoji="🗑️", row=2)
     async def remove_code_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
         if not interaction.user.guild_permissions.manage_guild:
             return await interaction.response.send_message("❌ ต้องมีสิทธิ์ Manage Server ถึงจะลบโค้ดได้ค่ะ", ephemeral=True)
         await interaction.response.send_message(
             "เลือกเกมที่จะลบโค้ดออกค่ะ:", view=RemoveCodeAdminView(), ephemeral=True
         )
+
+
+class GameCodeResultView(GameCodeView):
+    """เหมือน GameCodeView แต่เพิ่ม dropdown คัดลอกโค้ด เมื่อมีโค้ดให้เลือกแล้ว"""
+    def __init__(self, codes: list[tuple[str, str]]):
+        super().__init__()
+        if codes:
+            self.add_item(CopyCodeSelect(codes))
 
 
 # ------------------------------------------
@@ -1194,22 +1216,40 @@ class AddCodeModal(discord.ui.Modal):
     def __init__(self, game_key: str, game_label: str):
         super().__init__(title=f"เพิ่มโค้ด — {game_label}"[:45])
         self.game_key = game_key
-        self.code_input = discord.ui.TextInput(
-            label="โค้ด (Code)", placeholder="เช่น FREEBELI", max_length=100, required=True
+        self.codes_input = discord.ui.TextInput(
+            label="โค้ด (ใส่ได้หลายบรรทัด บรรทัดละ 1 โค้ด)",
+            placeholder="CODE1 - คำอธิบาย\nCODE2 - คำอธิบาย\nCODE3",
+            style=discord.TextStyle.paragraph,
+            max_length=4000,
+            required=True,
         )
-        self.desc_input = discord.ui.TextInput(
-            label="คำอธิบายรางวัล", placeholder="เช่น แลก 100 Beli ฟรี",
-            max_length=200, required=False, style=discord.TextStyle.short
-        )
-        self.add_item(self.code_input)
-        self.add_item(self.desc_input)
+        self.add_item(self.codes_input)
 
     async def on_submit(self, interaction: discord.Interaction):
-        code = str(self.code_input.value).strip()
-        desc = str(self.desc_input.value).strip()
-        add_manual_code(self.game_key, code, desc)
+        raw_lines = str(self.codes_input.value).splitlines()
+        added = []
+        for line in raw_lines:
+            line = line.strip()
+            if not line:
+                continue
+            # รองรับตัวคั่นทั้ง " - ", " : ", " — " ระหว่างโค้ดกับคำอธิบาย
+            code, desc = line, ""
+            for sep in (" - ", " — ", " : ", "-", ":"):
+                if sep in line:
+                    code, desc = line.split(sep, 1)
+                    break
+            code, desc = code.strip(), desc.strip()
+            if not code:
+                continue
+            add_manual_code(self.game_key, code, desc)
+            added.append(code)
+
+        if not added:
+            return await interaction.response.send_message("❌ ไม่พบโค้ดที่ใส่มาเลยค่ะ ลองใหม่อีกครั้งน้าา", ephemeral=True)
+
+        code_list = ", ".join(f"`{c}`" for c in added)
         await interaction.response.send_message(
-            f"✅ เพิ่มโค้ด `{code}` ให้เกม **{GAME_CODE_SOURCES[self.game_key]['label']}** เรียบร้อยค๊าา!",
+            f"✅ เพิ่ม {len(added)} โค้ด ให้เกม **{GAME_CODE_SOURCES[self.game_key]['label']}** เรียบร้อยค๊าา!\n{code_list}",
             ephemeral=True,
         )
 
