@@ -186,6 +186,14 @@ music_queues = {}
 current_songs = {} 
 loop_status = {}   
 
+# ==========================================
+# ⚙️ IN-MEMORY CONFIG (รีเซ็ตเมื่อบอทรีสตาร์ท/deploy ใหม่ — ยังไม่ใช้ฐานข้อมูล)
+# ==========================================
+WELCOME_CONFIG = {}      # guild_id -> {"channel_id": int, "autorole_id": int}
+STICKY_MESSAGES = {}     # channel_id -> {"content": str, "message_id": int}
+AFK_USERS = {}           # user_id -> reason (str)
+
+
 YTDL_OPTIONS = {
     'format': 'bestaudio/best',
     'noplaylist': True,
@@ -410,6 +418,22 @@ def _build_kick_view(guild):
     embed = discord.Embed(title="🚫 ระบบโหวตเตะสมาชิก (โหมด Doro เอาจริง!)", description="โปรดเลือกรายชื่อคนที่ไม่น่ารักที่คุณต้องการเริ่มโหวตลงมติเตะด้านล่างนี้ได้เลยค่ะงึมมม", color=discord.Color.red())
     return embed, MemberSelectView(guild)
 
+def _build_welcome_view(guild):
+    cfg = WELCOME_CONFIG.get(guild.id, {})
+    channel = guild.get_channel(cfg.get("channel_id")) if cfg.get("channel_id") else None
+    role = guild.get_role(cfg.get("autorole_id")) if cfg.get("autorole_id") else None
+    embed = discord.Embed(
+        title="👋 ตั้งค่าระบบต้อนรับสมาชิกใหม่ / บอกลา / Auto-role",
+        description=(
+            f"📢 ห้องส่งข้อความทักทาย/บอกลาตอนนี้: {channel.mention if channel else '*ยังไม่ได้ตั้งค่า*'}\n"
+            f"🎭 ยศอัตโนมัติให้สมาชิกใหม่: {role.mention if role else '*ปิดอยู่*'}\n\n"
+            "เลือกห้องและยศจากเมนูด้านล่างนี้ได้เลยค่ะ\n"
+            "⚠️ *ค่านี้เก็บไว้ในหน่วยความจำเท่านั้น ถ้าบอทรีสตาร์ทหรือ deploy ใหม่จะต้องมาตั้งค่าใหม่อีกครั้งนะคะ*"
+        ),
+        color=0x1ABC9C,
+    )
+    return embed, WelcomeConfigView(guild)
+
 def _build_analytics_view(guild):
     embed = discord.Embed(title="📈 ศูนย์บริการข้อมูลสมาชิกเเละสถิติเชิงลึก", description="เลือกดูสถิติภาพรวม ตรวจสอบรายชื่อแอดมิน หรือค้นหาคนไร้ยศในเซิร์ฟเวอร์ได้เลยค๊าา ✨", color=0x2ECC71)
     return embed, MemberAnalyticsView(guild)
@@ -450,13 +474,14 @@ ACTION_REGISTRY = {
     "roblox_servers": {"label": "🎮 รวมลิงก์ Private Server Roblox", "description": "คลังแสงลิงก์เซิร์ฟเวอร์วีเกมต่าง ๆ ของชาว Robloxค๊าา", "build": _build_roblox_view},
     "game_codes": {"label": "🎁 เช็คโค้ดเกม Roblox", "description": "ดูโค้ดล่าสุดของเกมยอดฮิต พร้อมปุ่มคัดลอกโค้ด", "build": _build_game_codes_view},
     "setup_kick": {"label": "🚫 เริ่มวาระโหวตเตะสมาชิก", "description": "เลือกคนที่ทำตัวไม่น่ารักเพื่อเริ่มโหวตเตะกันค่ะ!", "build": _build_kick_view},
+    "setup_welcome": {"label": "👋 ตั้งค่าต้อนรับสมาชิกใหม่ & Auto-role", "description": "ตั้งห้องทักทาย/บอกลา และแจกยศอัตโนมัติให้คนเข้าใหม่", "build": _build_welcome_view},
     "setup_analytics": {"label": "📊 ตรวจสอบข้อมูลสมาชิกกลุ่ม (NEW!)", "description": "เช็คสถิติแบบเรียลไทม์ ตรวจสอบแอดมิน และคนไม่มียศค๊าา", "build": _build_analytics_view},
     "show_commands": {"label": "📖 ดูคู่มือคำสั่งบอททั้งหมด", "description": "มาดูคู่มือการสั่งงานและบันทึกความสามารถน้อน Doro กันงับ", "build": _build_help_view},
 }
 
 CATEGORY_REGISTRY = {
     "cat_music": {"label": "🎵 บันเทิง", "description": "เพลง และ Soundboard", "items": ["setup_music", "setup_soundboard"]},
-    "cat_manage": {"label": "🛡️ จัดการเซิร์ฟเวอร์", "description": "ล้างแชท / ยศ / โหวตเตะสมาชิก", "items": ["setup_clear", "setup_roles", "setup_kick"]},
+    "cat_manage": {"label": "🛡️ จัดการเซิร์ฟเวอร์", "description": "ล้างแชท / ยศ / โหวตเตะ / ต้อนรับสมาชิกใหม่", "items": ["setup_clear", "setup_roles", "setup_kick", "setup_welcome"]},
     "cat_info": {"label": "📊 ข้อมูล & โพล", "description": "สร้างโพล และเช็คสถิติสมาชิก", "items": ["setup_poll", "setup_analytics"]},
     "cat_roblox": {"label": "🎮 Roblox", "description": "ลิงก์เซิร์ฟและโค้ดเกม", "items": ["roblox_servers", "game_codes"]},
     "cat_help": {"label": "📖 คู่มือคำสั่ง", "description": "ดูคู่มือความสามารถของ Doro", "items": ["show_commands"]},
@@ -876,6 +901,46 @@ class RequestRoleView(discord.ui.View):
     @discord.ui.button(label="🔙 ย้อนกลับหน้าแรก", style=discord.ButtonStyle.secondary, emoji="⬅️", row=2)
     async def back(self, interaction: discord.Interaction, btn): 
         await interaction.message.edit(embed=generate_main_menu_embed(self.guild), view=BotControlMenuView(self.guild))
+
+
+class WelcomeConfigView(discord.ui.View):
+    def __init__(self, guild):
+        super().__init__(timeout=None)
+        self.guild = guild
+
+    @discord.ui.select(cls=discord.ui.ChannelSelect, channel_types=[discord.ChannelType.text],
+                        placeholder="📢 เลือกห้องส่งข้อความต้อนรับ/บอกลา...", row=0)
+    async def channel_select(self, interaction: discord.Interaction, select: discord.ui.ChannelSelect):
+        await interaction.response.defer(ephemeral=True)
+        channel = select.values[0]
+        WELCOME_CONFIG.setdefault(self.guild.id, {})["channel_id"] = channel.id
+        await interaction.followup.send(f"✅ ตั้งห้อง {channel.mention} เป็นห้องต้อนรับ/บอกลาแล้วค่ะ", ephemeral=True)
+
+    @discord.ui.select(cls=discord.ui.RoleSelect,
+                        placeholder="🎭 เลือกยศแจกอัตโนมัติให้สมาชิกใหม่ (ไม่บังคับ)...", row=1)
+    async def role_select(self, interaction: discord.Interaction, select: discord.ui.RoleSelect):
+        await interaction.response.defer(ephemeral=True)
+        role = select.values[0]
+        WELCOME_CONFIG.setdefault(self.guild.id, {})["autorole_id"] = role.id
+        await interaction.followup.send(f"✅ ตั้งยศอัตโนมัติเป็น **{role.name}** แล้วค่ะ", ephemeral=True)
+
+    @discord.ui.button(label="ปิด Auto-role", style=discord.ButtonStyle.secondary, emoji="🚫", row=2)
+    async def disable_autorole(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.defer(ephemeral=True)
+        WELCOME_CONFIG.get(self.guild.id, {}).pop("autorole_id", None)
+        await interaction.followup.send("🚫 ปิด Auto-role แล้วค่ะ", ephemeral=True)
+
+    @discord.ui.button(label="ปิดระบบทั้งหมด", style=discord.ButtonStyle.danger, emoji="❌", row=2)
+    async def disable_all(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.defer(ephemeral=True)
+        WELCOME_CONFIG.pop(self.guild.id, None)
+        await interaction.followup.send("❌ ปิดระบบต้อนรับ/บอกลา/Auto-role ทั้งหมดแล้วค่ะ", ephemeral=True)
+
+    @discord.ui.button(label="🔙 ย้อนกลับหน้าแรก", style=discord.ButtonStyle.secondary, emoji="⬅️", row=3)
+    async def back(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.defer()
+        await interaction.message.edit(embed=generate_main_menu_embed(self.guild), view=BotControlMenuView(self.guild))
+
 # ==========================================
 # 📊 POLL SYSTEM COMPONENTS
 # ==========================================
@@ -1505,12 +1570,91 @@ async def slash_menu(interaction: discord.Interaction):
         embed=generate_main_menu_embed(interaction.guild),
         view=BotControlMenuView(interaction.guild),
     )
+
+
+@bot.event
+async def on_member_join(member: discord.Member):
+    cfg = WELCOME_CONFIG.get(member.guild.id)
+    if not cfg:
+        return
+    channel = member.guild.get_channel(cfg.get("channel_id")) if cfg.get("channel_id") else None
+    if channel:
+        embed = discord.Embed(
+            title="🎉 มีเพื่อนใหม่เข้ามาในเซิร์ฟแล้วค่าา!",
+            description=f"ยินดีต้อนรับ {member.mention} เข้าสู่ **{member.guild.name}** น้าา~ 💕\nฝากเนื้อฝากตัวกันด้วยนะค๊าา",
+            color=0x2ECC71,
+        )
+        embed.set_thumbnail(url=member.display_avatar.url)
+        try:
+            await channel.send(embed=embed)
+        except Exception as e:
+            logger.warning(f"welcome message failed: {type(e).__name__}: {e}")
+    autorole_id = cfg.get("autorole_id")
+    if autorole_id:
+        role = member.guild.get_role(autorole_id)
+        if role:
+            try:
+                await member.add_roles(role, reason="Auto-role on join")
+            except Exception as e:
+                logger.warning(f"autorole failed: {type(e).__name__}: {e}")
+
+
+@bot.event
+async def on_member_remove(member: discord.Member):
+    cfg = WELCOME_CONFIG.get(member.guild.id)
+    if not cfg:
+        return
+    channel = member.guild.get_channel(cfg.get("channel_id")) if cfg.get("channel_id") else None
+    if channel:
+        embed = discord.Embed(
+            title="💔 มีคนออกจากเซิร์ฟไปแล้วง้อ...",
+            description=f"**{member.display_name}** ออกจากเซิร์ฟไปแล้วค่ะ ขอบคุณที่เคยอยู่ด้วยกันน้าา 🥺",
+            color=0xE74C3C,
+        )
+        try:
+            await channel.send(embed=embed)
+        except Exception as e:
+            logger.warning(f"goodbye message failed: {type(e).__name__}: {e}")
+
 @bot.event
 async def on_message(message: discord.Message):
     if message.author.bot: return
     msg = message.content.strip()
     lower_msg = msg.lower()
     parts = msg.split()
+
+    # --- 💤 ระบบ AFK ---
+    if lower_msg == "doro afk" or lower_msg.startswith("doro afk "):
+        reason = msg[len("doro afk"):].strip() or "ไปทำธุระก่อนน้าา"
+        AFK_USERS[message.author.id] = reason
+        await message.channel.send(f"💤 ตั้งสถานะ AFK ให้ **{message.author.display_name}** แล้วค่ะ: _{reason}_", delete_after=8)
+        return
+    if message.author.id in AFK_USERS:
+        del AFK_USERS[message.author.id]
+        await message.channel.send(f"👋 ยินดีต้อนรับกลับมาค่ะ **{message.author.display_name}** ปลด AFK ให้แล้วน้าา~", delete_after=5)
+    if message.mentions:
+        afk_mentions = [m for m in message.mentions if m.id in AFK_USERS and m.id != message.author.id]
+        if afk_mentions:
+            lines = [f"💤 **{m.display_name}** กำลัง AFK อยู่ค่ะ: _{AFK_USERS[m.id]}_" for m in afk_mentions]
+            await message.channel.send("\n".join(lines), delete_after=8)
+
+    # --- 📌 ระบบ Sticky Message (ตั้งค่า/ปิด) ---
+    if lower_msg.startswith("doro sticky "):
+        if not message.author.guild_permissions.manage_messages:
+            return await message.channel.send("❌ ต้องมีสิทธิ์ Manage Messages ถึงจะตั้ง sticky ได้ค่ะ")
+        content = msg[len("doro sticky "):].strip()
+        if content.lower() in ("off", "ปิด"):
+            old = STICKY_MESSAGES.pop(message.channel.id, None)
+            if old:
+                try:
+                    old_msg = await message.channel.fetch_message(old["message_id"])
+                    await old_msg.delete()
+                except Exception:
+                    pass
+            return await message.channel.send("📌 ปิดข้อความปักหมุดของห้องนี้แล้วค่ะ", delete_after=5)
+        sent = await message.channel.send(f"📌 **ข้อความปักหมุด:**\n{content}")
+        STICKY_MESSAGES[message.channel.id] = {"content": content, "message_id": sent.id}
+        return
 
     if lower_msg in custom_responses:
         await message.channel.send(custom_responses[lower_msg])
@@ -1631,5 +1775,20 @@ async def on_message(message: discord.Message):
             source = discord.FFmpegPCMAudio(song_data['url'], **FFMPEG_OPTIONS)
             vc.play(source, after=lambda e: play_next_song(guild_id, vc, message.channel))
             await message.channel.send(embed=generate_main_menu_embed(message.guild), view=MusicControlView(message.guild))
+        return
+
+    # --- 📌 บั๊มปักหมุดข้อความ sticky ให้ลอยอยู่ล่างสุดของห้องเสมอ ---
+    sticky = STICKY_MESSAGES.get(message.channel.id)
+    if sticky:
+        try:
+            old_msg = await message.channel.fetch_message(sticky["message_id"])
+            await old_msg.delete()
+        except Exception:
+            pass
+        try:
+            new_msg = await message.channel.send(f"📌 **ข้อความปักหมุด:**\n{sticky['content']}")
+            STICKY_MESSAGES[message.channel.id]["message_id"] = new_msg.id
+        except Exception as e:
+            logger.warning(f"sticky repost failed: {type(e).__name__}: {e}")
 
 bot.run(DISCORD_TOKEN)
