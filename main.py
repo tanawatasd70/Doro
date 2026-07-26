@@ -619,16 +619,22 @@ class AddRobloxServerModal(discord.ui.Modal, title="🎮 กรอกราย�
         self.add_item(self.game_image)
 
     async def on_submit(self, interaction: discord.Interaction):
+        await interaction.response.defer(ephemeral=True)
         g_id = self.game_id.value.strip().lower().replace(" ", "_")
         full_display_name = f"{self.selected_emoji} {self.game_name.value.strip()}"
-        current_data = load_roblox_data()
-        current_data[g_id] = {
-            "name": full_display_name, 
-            "url": self.game_url.value.strip(),
-            "image": self.game_image.value.strip() if self.game_image.value else None
-        }
-        save_roblox_data(current_data)
-        await interaction.response.send_message(f"✅ บันทึกเกม **{full_display_name}** เรียบร้อยค๊าา!", ephemeral=True)
+        try:
+            current_data = await asyncio.to_thread(load_roblox_data)
+            current_data[g_id] = {
+                "name": full_display_name, 
+                "url": self.game_url.value.strip(),
+                "image": self.game_image.value.strip() if self.game_image.value else None
+            }
+            await asyncio.to_thread(save_roblox_data, current_data)
+        except Exception as e:
+            logger.warning(f"save_roblox_data failed: {type(e).__name__}: {e}")
+            print(f"[ADD ROBLOX SERVER ERROR] {type(e).__name__}: {e}", flush=True)
+            return await interaction.followup.send(f"❌ บันทึกไม่สำเร็จ (เชื่อมต่อฐานข้อมูลไม่ได้): {type(e).__name__}", ephemeral=True)
+        await interaction.followup.send(f"✅ บันทึกเกม **{full_display_name}** เรียบร้อยค๊าา!", ephemeral=True)
 
 class RobloxEmojiSelect(discord.ui.Select):
 
@@ -681,12 +687,12 @@ class DeleteRobloxServerModal(discord.ui.Modal, title="🗑️ ลบลิง�
     async def on_submit(self, interaction: discord.Interaction):
         await interaction.response.defer(ephemeral=True)
         g_id = self.game_id.value.strip().lower().replace(" ", "_")
-        current_data = load_roblox_data()
+        current_data = await asyncio.to_thread(load_roblox_data)
 
         if g_id in current_data:
             deleted_name = current_data[g_id]['name']
             del current_data[g_id]
-            save_roblox_data(current_data)
+            await asyncio.to_thread(save_roblox_data, current_data)
             await interaction.followup.send(f"🗑️ ลบเกม **{deleted_name}** ออกจากคลังแสงเรียบร้อยค๊าา!", ephemeral=True, delete_after=3)
         else: 
             await interaction.followup.send(f"❌ ไม่พบรหัสเกม '{g_id}' ในระบบค๊าา ลองเช็คตัวพิมพ์ดี ๆ น้าา", ephemeral=True, delete_after=3)
@@ -1256,29 +1262,35 @@ class AddCodeModal(discord.ui.Modal):
         self.add_item(self.codes_input)
 
     async def on_submit(self, interaction: discord.Interaction):
+        await interaction.response.defer(ephemeral=True)
         raw_lines = str(self.codes_input.value).splitlines()
         added = []
-        for line in raw_lines:
-            line = line.strip()
-            if not line:
-                continue
-            # รองรับตัวคั่นทั้ง " - ", " : ", " — " ระหว่างโค้ดกับคำอธิบาย
-            code, desc = line, ""
-            for sep in (" - ", " — ", " : ", "-", ":"):
-                if sep in line:
-                    code, desc = line.split(sep, 1)
-                    break
-            code, desc = code.strip(), desc.strip()
-            if not code:
-                continue
-            add_manual_code(self.game_key, code, desc)
-            added.append(code)
+        try:
+            for line in raw_lines:
+                line = line.strip()
+                if not line:
+                    continue
+                # รองรับตัวคั่นทั้ง " - ", " : ", " — " ระหว่างโค้ดกับคำอธิบาย
+                code, desc = line, ""
+                for sep in (" - ", " — ", " : ", "-", ":"):
+                    if sep in line:
+                        code, desc = line.split(sep, 1)
+                        break
+                code, desc = code.strip(), desc.strip()
+                if not code:
+                    continue
+                await asyncio.to_thread(add_manual_code, self.game_key, code, desc)
+                added.append(code)
+        except Exception as e:
+            logger.warning(f"add_manual_code failed for {self.game_key}: {type(e).__name__}: {e}")
+            print(f"[ADD CODE ERROR] {self.game_key}: {type(e).__name__}: {e}", flush=True)
+            return await interaction.followup.send(f"❌ บันทึกโค้ดไม่สำเร็จ (เชื่อมต่อฐานข้อมูลไม่ได้): {type(e).__name__}", ephemeral=True)
 
         if not added:
-            return await interaction.response.send_message("❌ ไม่พบโค้ดที่ใส่มาเลยค่ะ ลองใหม่อีกครั้งน้าา", ephemeral=True)
+            return await interaction.followup.send("❌ ไม่พบโค้ดที่ใส่มาเลยค่ะ ลองใหม่อีกครั้งน้าา", ephemeral=True)
 
         code_list = ", ".join(f"`{c}`" for c in added)
-        await interaction.response.send_message(
+        await interaction.followup.send(
             f"✅ เพิ่ม {len(added)} โค้ด ให้เกม **{GAME_CODE_SOURCES[self.game_key]['label']}** เรียบร้อยค๊าา!\n{code_list}",
             ephemeral=True,
         )
