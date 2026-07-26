@@ -1017,6 +1017,10 @@ GAME_CODE_SOURCES = {
         "label": "🧠 Steal a Brainrot",
         "url": "https://progameguides.com/roblox/steal-a-brainrot-codes/",
     },
+    "anime_expeditions": {
+        "label": "🗺️ Anime Expeditions",
+        "url": "https://progameguides.com/roblox/anime-expeditions-codes/",
+    },
 }
 
 CODE_FETCH_HEADERS = {
