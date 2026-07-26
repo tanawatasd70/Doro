@@ -6,6 +6,8 @@ import pytz
 import logging
 import discord
 import yt_dlp
+import aiohttp
+from bs4 import BeautifulSoup
 from datetime import datetime
 from discord.ext import commands
 from dotenv import load_dotenv
@@ -978,6 +980,135 @@ class MultiRoleManagementView(discord.ui.View):
         await interaction.channel.send("🛡️ มอบยศกลุ่มความเร็วสูงเสร็จเรียบร้อยค๊าา!", delete_after=10)
 
 # ==========================================
+# 🎮 ROBLOX GAME CODES (LIVE FETCH)
+# ==========================================
+# แหล่งข้อมูล: progameguides.com — อัปเดตโค้ดทุกวัน แต่ถ้าเว็บเปลี่ยนโครงสร้าง
+# HTML อาจต้องปรับ selector ใน parse_codes_from_html() ใหม่
+GAME_CODE_SOURCES = {
+    "blox_fruits": {
+        "label": "🍈 Blox Fruits",
+        "url": "https://progameguides.com/roblox/roblox-blox-fruits-codes/",
+    },
+    "grow_a_garden": {
+        "label": "🌱 Grow a Garden",
+        "url": "https://progameguides.com/roblox/grow-a-garden-codes/",
+    },
+    "anime_vanguards": {
+        "label": "⚔️ Anime Vanguards",
+        "url": "https://progameguides.com/roblox/anime-vanguards-codes/",
+    },
+    "fisch": {
+        "label": "🎣 Fisch",
+        "url": "https://progameguides.com/roblox/fisch-codes/",
+    },
+    "fruit_battlegrounds": {
+        "label": "🥊 Fruit Battlegrounds",
+        "url": "https://progameguides.com/roblox/fruits-battlegrounds-codes/",
+    },
+    "steal_a_brainrot": {
+        "label": "🧠 Steal a Brainrot",
+        "url": "https://progameguides.com/roblox/steal-a-brainrot-codes/",
+    },
+}
+
+CODE_FETCH_HEADERS = {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+                  "(KHTML, like Gecko) Chrome/124.0 Safari/537.36"
+}
+
+
+def parse_codes_from_html(html: str) -> list[tuple[str, str]]:
+    """แกะรายชื่อโค้ด + คำอธิบาย ออกจากตาราง 'Active Codes' ในหน้าเว็บ"""
+    soup = BeautifulSoup(html, "html.parser")
+    codes: list[tuple[str, str]] = []
+
+    active_heading = None
+    for heading in soup.find_all(["h2", "h3", "h4"]):
+        if "active code" in heading.get_text(strip=True).lower():
+            active_heading = heading
+            break
+
+    table = active_heading.find_next("table") if active_heading else soup.find("table")
+    if not table:
+        return codes
+
+    for row in table.find_all("tr"):
+        cells = [c.get_text(strip=True) for c in row.find_all(["td", "th"])]
+        cells = [c for c in cells if c and c.lower() != "copy"]
+        if len(cells) >= 2 and cells[0].lower() not in ("code", ""):
+            code, desc = cells[0], cells[1]
+            codes.append((code, desc))
+        elif len(cells) == 1 and cells[0].lower() not in ("code", ""):
+            codes.append((cells[0], ""))
+
+    return codes
+
+
+async def fetch_game_codes(url: str) -> list[tuple[str, str]]:
+    async with aiohttp.ClientSession(headers=CODE_FETCH_HEADERS) as session:
+        async with session.get(url, timeout=aiohttp.ClientTimeout(total=15)) as resp:
+            resp.raise_for_status()
+            html = await resp.text()
+    return parse_codes_from_html(html)
+
+
+def build_codes_embed(game_label: str, source_url: str, codes: list[tuple[str, str]]) -> discord.Embed:
+    if not codes:
+        embed = discord.Embed(
+            title=f"📭 {game_label} — ยังไม่มีโค้ดที่ใช้งานได้ตอนนี้",
+            description=f"ลองเช็กอีกทีทีหลังนะคะ หรือดูที่ [แหล่งข้อมูล]({source_url})",
+            color=0xFFB6C1,
+        )
+        return embed
+
+    lines = []
+    for code, desc in codes[:20]:
+        if desc:
+            lines.append(f"`{code}` — {desc}")
+        else:
+            lines.append(f"`{code}`")
+
+    embed = discord.Embed(
+        title=f"🎁 โค้ดที่ใช้งานได้ตอนนี้ — {game_label}",
+        description="\n".join(lines),
+        color=0x77DD77,
+    )
+    embed.set_footer(text=f"อัปเดตล่าสุดจาก progameguides.com • ทั้งหมด {len(codes)} โค้ด")
+    return embed
+
+
+class GameCodeSelect(discord.ui.Select):
+    def __init__(self):
+        options = [
+            discord.SelectOption(label=info["label"], value=key)
+            for key, info in GAME_CODE_SOURCES.items()
+        ]
+        super().__init__(placeholder="🎮 เลือกเกมที่ต้องการดูโค้ด...", options=options)
+
+    async def callback(self, interaction: discord.Interaction):
+        await interaction.response.defer()
+        game_key = self.values[0]
+        info = GAME_CODE_SOURCES[game_key]
+        try:
+            codes = await fetch_game_codes(info["url"])
+            embed = build_codes_embed(info["label"], info["url"], codes)
+        except Exception as e:
+            logger.warning(f"fetch_game_codes failed for {game_key}: {e}")
+            embed = discord.Embed(
+                title="❌ ดึงโค้ดไม่สำเร็จ",
+                description="งื้อออ ตอนนี้หนูดึงข้อมูลจากเว็บไม่ได้ค่ะ ลองใหม่อีกครั้งทีหลังน้าา",
+                color=0xFF6961,
+            )
+        await interaction.message.edit(embed=embed, view=GameCodeView())
+
+
+class GameCodeView(discord.ui.View):
+    def __init__(self):
+        super().__init__(timeout=120)
+        self.add_item(GameCodeSelect())
+
+
+# ==========================================
 # ⚙️ CORE EVENTS & COMMANDS MAIN LOGIC
 # ==========================================
 @bot.event
@@ -1018,6 +1149,15 @@ async def on_message(message: discord.Message):
         except: 
             pass
         await message.channel.send(embed=discord.Embed(title="🛡️ ระบบมอบยศกลุ่มอัจฉริยะค๊าาา ", color=0xFFB6C1), view=MultiRoleManagementView(message.guild))
+        return
+
+    if lower_msg in ("doro โค้ด", "doro code", "doro โคด"):
+        embed = discord.Embed(
+            title="🎮 ระบบเช็คโค้ดเกม Roblox",
+            description="เลือกเกมจากเมนูด้านล่างเลยค่ะ หนูจะไปหาโค้ดล่าสุดมาให้น้าา~ 🔍",
+            color=0xFFB6C1,
+        )
+        await message.channel.send(embed=embed, view=GameCodeView())
         return
 
     if (f"doro ลบข้อความ" in lower_msg or f"doro clear" in lower_msg) and len(parts) >= 3:
@@ -1080,4 +1220,4 @@ async def on_message(message: discord.Message):
             vc.play(source, after=lambda e: play_next_song(guild_id, vc, message.channel))
             await message.channel.send(embed=generate_main_menu_embed(message.guild), view=MusicControlView(message.guild))
 
-bot.run(DISCORD_TOKEN) 
+bot.run(DISCORD_TOKEN)
