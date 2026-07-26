@@ -628,6 +628,42 @@ class ClearChannelView(discord.ui.View):
 # =====================================================================
 # 📊 UPDATE FEATURE: MEMBER ANALYTICS SYSTEM (ระบบเปลี่ยนหน้า ไม่สร้างกล่องแชทใหม่)
 # =====================================================================
+class BulkAssignRoleSelect(discord.ui.Select):
+    def __init__(self, guild):
+        self.guild = guild
+        me_top_role = guild.me.top_role if guild.me else None
+        roles = [
+            r for r in guild.roles
+            if r.name != "@everyone" and not r.managed and (me_top_role is None or r < me_top_role)
+        ]
+        options = [discord.SelectOption(label=r.name[:90], value=str(r.id)) for r in roles[:25]]
+        super().__init__(placeholder="🎁 เลือกยศที่จะแจกให้คนไร้ยศทั้งหมดค๊าา...", options=options or [discord.SelectOption(label="ไม่มียศให้เลือก", value="none")])
+
+    async def callback(self, interaction: discord.Interaction):
+        await interaction.response.defer(ephemeral=True)
+        if self.values[0] == "none":
+            return await interaction.followup.send("❌ ไม่มียศที่บอทสามารถแจกได้ (เช็คลำดับยศของบอทด้วยนะคะ)", ephemeral=True)
+        role = interaction.guild.get_role(int(self.values[0]))
+        if not role:
+            return await interaction.followup.send("❌ ไม่พบยศนี้แล้วค่ะ", ephemeral=True)
+        no_role_members = [m for m in interaction.guild.members if not m.bot and len(m.roles) == 1]
+        if not no_role_members:
+            return await interaction.followup.send("🎉 ไม่มีใครไร้ยศแล้วค่ะตอนนี้!", ephemeral=True)
+        success, failed = 0, 0
+        for m in no_role_members:
+            try:
+                await m.add_roles(role, reason=f"Bulk assign by {interaction.user}")
+                success += 1
+            except Exception as e:
+                failed += 1
+                logger.warning(f"bulk role assign failed for {m}: {type(e).__name__}: {e}")
+            await asyncio.sleep(0.5)  # กันโดน rate limit ของ Discord ตอนแจกทีละหลายคน
+        msg = f"✅ แจกยศ **{role.name}** ให้สมาชิก **{success}** คนเรียบร้อยค๊าา!"
+        if failed:
+            msg += f"\n⚠️ มี **{failed}** คนที่แจกไม่สำเร็จ (เช็คสิทธิ์/ลำดับยศของบอทด้วยนะคะ)"
+        await interaction.followup.send(msg, ephemeral=True)
+
+
 class MemberAnalyticsView(discord.ui.View):
     def __init__(self, guild):
         super().__init__(timeout=None)
@@ -670,6 +706,21 @@ class MemberAnalyticsView(discord.ui.View):
         else:
             embed.description = "🎉 ยอดเยี่ยมมากค๊าา! ทุกคนในเซิร์ฟเวอร์นี้มียศติดตัวกันหมดเรียบร้อยแล้วจ้าา"
         await interaction.message.edit(embed=embed, view=self)
+
+    @discord.ui.button(label="แจกยศให้คนไร้ยศ", style=discord.ButtonStyle.success, emoji="🎁", row=0)
+    async def bulk_assign_role(self, interaction: discord.Interaction, btn):
+        if not interaction.user.guild_permissions.manage_roles:
+            return await interaction.response.send_message("❌ ต้องมีสิทธิ์ Manage Roles ถึงจะแจกยศแบบนี้ได้ค่ะ", ephemeral=True)
+        no_role = [m for m in self.guild.members if not m.bot and len(m.roles) == 1]
+        if not no_role:
+            return await interaction.response.send_message("🎉 ไม่มีใครไร้ยศแล้วค่ะตอนนี้!", ephemeral=True)
+        view = discord.ui.View(timeout=120)
+        view.add_item(BulkAssignRoleSelect(self.guild))
+        await interaction.response.send_message(
+            f"พบสมาชิกไร้ยศ **{len(no_role)}** คน เลือกยศที่จะแจกให้ทั้งหมดได้จากเมนูด้านล่างนี้เลยค่ะ:",
+            view=view, ephemeral=True,
+        )
+
     @discord.ui.button(label="🔙 ย้อนกลับหน้าแรก", style=discord.ButtonStyle.danger, emoji="⬅️", row=1)
     async def back(self, interaction: discord.Interaction, btn):
         await interaction.response.defer()
