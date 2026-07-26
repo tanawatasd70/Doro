@@ -43,6 +43,18 @@ DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")
 if not DISCORD_TOKEN:
     raise RuntimeError("DISCORD_TOKEN missing in environment.")
 
+# ==========================================
+# 🍃 MONGODB ATLAS CONNECTION
+# ==========================================
+from pymongo import MongoClient
+
+MONGODB_URI = os.getenv("MONGODB_URI")
+if not MONGODB_URI:
+    raise RuntimeError("MONGODB_URI missing in environment.")
+
+mongo_client = MongoClient(MONGODB_URI)
+mongo_db = mongo_client.get_database("doro_bot")  # ชื่อ database ในคลัสเตอร์ (เปลี่ยนได้ตามต้องการ)
+
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("doro")
 
@@ -63,20 +75,21 @@ custom_responses = {
 
 vote_records = {}  
 poll_result_messages = {} 
-JSON_FILE = "roblox_servers.json"
+ROBLOX_DOC_ID = "roblox_servers"
 
 def load_roblox_data():
-    try:
-        with open(JSON_FILE, "r", encoding="utf-8") as f: 
-            return json.load(f)
-    except FileNotFoundError:
-        default_data = {"blox_fruits": {"name": "🏴‍☠️ Blox Fruits", "url": "https://www.roblox.com/"}}
-        save_roblox_data(default_data)
-        return default_data
+    doc = mongo_db.settings.find_one({"_id": ROBLOX_DOC_ID})
+    if doc:
+        doc.pop("_id", None)
+        return doc
+    default_data = {"blox_fruits": {"name": "🏴‍☠️ Blox Fruits", "url": "https://www.roblox.com/"}}
+    save_roblox_data(default_data)
+    return default_data
 
 def save_roblox_data(data):
-    with open(JSON_FILE, "w", encoding="utf-8") as f: 
-        json.dump(data, f, indent=4, ensure_ascii=False)
+    mongo_db.settings.update_one(
+        {"_id": ROBLOX_DOC_ID}, {"$set": data}, upsert=True
+    )
 
 # ==========================================
 # 🔓 DYNAMIC GROUP ROLE VIEW (🐈‍⬛ BLACK CAT THEME)
@@ -1030,20 +1043,21 @@ CODE_FETCH_HEADERS = {
     "Accept-Language": "en-US,en;q=0.9,th;q=0.8",
 }
 
-MANUAL_CODES_FILE = "manual_codes.json"
+MANUAL_CODES_DOC_ID = "manual_codes"
 
 
 def load_manual_codes() -> dict:
-    try:
-        with open(MANUAL_CODES_FILE, "r", encoding="utf-8") as f:
-            return json.load(f)
-    except FileNotFoundError:
-        return {}
+    doc = mongo_db.settings.find_one({"_id": MANUAL_CODES_DOC_ID})
+    if doc:
+        doc.pop("_id", None)
+        return doc
+    return {}
 
 
 def save_manual_codes(data: dict):
-    with open(MANUAL_CODES_FILE, "w", encoding="utf-8") as f:
-        json.dump(data, f, indent=4, ensure_ascii=False)
+    mongo_db.settings.update_one(
+        {"_id": MANUAL_CODES_DOC_ID}, {"$set": data}, upsert=True
+    )
 
 
 def get_manual_codes(game_key: str) -> list[tuple[str, str]]:
