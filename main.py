@@ -434,6 +434,30 @@ def _build_welcome_view(guild):
     )
     return embed, WelcomeConfigView(guild)
 
+def _build_afk_view(guild):
+    embed = discord.Embed(
+        title="😴 ระบบ AFK",
+        description=(
+            "กดปุ่ม **ตั้งสถานะ AFK** เพื่อกรอกเหตุผล (จะแจ้งอัตโนมัติถ้ามีคนมาแท็กหาคุณ) "
+            "หรือกด **ปลด AFK** เพื่อยกเลิกด้วยตัวเองได้เลยค่ะ\n\n"
+            "(ระบบจะปลด AFK ให้อัตโนมัติทันทีที่คุณพิมพ์ข้อความในเซิร์ฟด้วยนะคะ)"
+        ),
+        color=0x95A5A6,
+    )
+    return embed, AFKConfigView(guild)
+
+def _build_sticky_view(guild):
+    embed = discord.Embed(
+        title="📌 ตั้งค่าข้อความปักหมุด (Sticky Message)",
+        description=(
+            "เลือกห้องที่ต้องการจากเมนูด้านล่าง แล้วกดปุ่ม **ตั้งข้อความปักหมุด** เพื่อพิมพ์ข้อความที่จะปักหมุดค่ะ\n"
+            "ข้อความจะลอยอยู่ล่างสุดของห้องนั้นเสมอ ไม่ว่าจะมีคนแชทเพิ่มกี่ข้อความก็ตาม"
+        ),
+        color=0x3498DB,
+    )
+    return embed, StickyConfigView(guild)
+
+
 def _build_analytics_view(guild):
     embed = discord.Embed(title="📈 ศูนย์บริการข้อมูลสมาชิกเเละสถิติเชิงลึก", description="เลือกดูสถิติภาพรวม ตรวจสอบรายชื่อแอดมิน หรือค้นหาคนไร้ยศในเซิร์ฟเวอร์ได้เลยค๊าา ✨", color=0x2ECC71)
     return embed, MemberAnalyticsView(guild)
@@ -475,13 +499,15 @@ ACTION_REGISTRY = {
     "game_codes": {"label": "🎁 เช็คโค้ดเกม Roblox", "description": "ดูโค้ดล่าสุดของเกมยอดฮิต พร้อมปุ่มคัดลอกโค้ด", "build": _build_game_codes_view},
     "setup_kick": {"label": "🚫 เริ่มวาระโหวตเตะสมาชิก", "description": "เลือกคนที่ทำตัวไม่น่ารักเพื่อเริ่มโหวตเตะกันค่ะ!", "build": _build_kick_view},
     "setup_welcome": {"label": "👋 ตั้งค่าต้อนรับสมาชิกใหม่ & Auto-role", "description": "ตั้งห้องทักทาย/บอกลา และแจกยศอัตโนมัติให้คนเข้าใหม่", "build": _build_welcome_view},
+    "setup_afk": {"label": "😴 ระบบ AFK", "description": "ตั้ง/ปลดสถานะไม่อยู่ พร้อมเหตุผลบอกคนที่มาแท็กหา", "build": _build_afk_view},
+    "setup_sticky": {"label": "📌 ตั้งค่าข้อความปักหมุด (Sticky)", "description": "ปักข้อความให้ลอยอยู่ล่างสุดของห้องนี้เสมอ", "build": _build_sticky_view},
     "setup_analytics": {"label": "📊 ตรวจสอบข้อมูลสมาชิกกลุ่ม (NEW!)", "description": "เช็คสถิติแบบเรียลไทม์ ตรวจสอบแอดมิน และคนไม่มียศค๊าา", "build": _build_analytics_view},
     "show_commands": {"label": "📖 ดูคู่มือคำสั่งบอททั้งหมด", "description": "มาดูคู่มือการสั่งงานและบันทึกความสามารถน้อน Doro กันงับ", "build": _build_help_view},
 }
 
 CATEGORY_REGISTRY = {
     "cat_music": {"label": "🎵 บันเทิง", "description": "เพลง และ Soundboard", "items": ["setup_music", "setup_soundboard"]},
-    "cat_manage": {"label": "🛡️ จัดการเซิร์ฟเวอร์", "description": "ล้างแชท / ยศ / โหวตเตะ / ต้อนรับสมาชิกใหม่", "items": ["setup_clear", "setup_roles", "setup_kick", "setup_welcome"]},
+    "cat_manage": {"label": "🛡️ จัดการเซิร์ฟเวอร์", "description": "ล้างแชท / ยศ / โหวตเตะ / ต้อนรับ / AFK / Sticky", "items": ["setup_clear", "setup_roles", "setup_kick", "setup_welcome", "setup_afk", "setup_sticky"]},
     "cat_info": {"label": "📊 ข้อมูล & โพล", "description": "สร้างโพล และเช็คสถิติสมาชิก", "items": ["setup_poll", "setup_analytics"]},
     "cat_roblox": {"label": "🎮 Roblox", "description": "ลิงก์เซิร์ฟและโค้ดเกม", "items": ["roblox_servers", "game_codes"]},
     "cat_help": {"label": "📖 คู่มือคำสั่ง", "description": "ดูคู่มือความสามารถของ Doro", "items": ["show_commands"]},
@@ -937,6 +963,117 @@ class WelcomeConfigView(discord.ui.View):
         await interaction.followup.send("❌ ปิดระบบต้อนรับ/บอกลา/Auto-role ทั้งหมดแล้วค่ะ", ephemeral=True)
 
     @discord.ui.button(label="🔙 ย้อนกลับหน้าแรก", style=discord.ButtonStyle.secondary, emoji="⬅️", row=3)
+    async def back(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.defer()
+        await interaction.message.edit(embed=generate_main_menu_embed(self.guild), view=BotControlMenuView(self.guild))
+
+
+class AFKReasonModal(discord.ui.Modal, title="😴 ตั้งสถานะ AFK"):
+    def __init__(self):
+        super().__init__()
+        self.reason_input = discord.ui.TextInput(
+            label="เหตุผล (ไม่บังคับ)", required=False, max_length=100,
+            placeholder="เช่น ไปกินข้าว, ไปนอนก่อนน้าา",
+        )
+        self.add_item(self.reason_input)
+
+    async def on_submit(self, interaction: discord.Interaction):
+        reason = self.reason_input.value.strip() or "ไปทำธุระก่อนน้าา"
+        AFK_USERS[interaction.user.id] = reason
+        await interaction.response.send_message(f"💤 ตั้งสถานะ AFK ให้คุณแล้วค่ะ: _{reason}_", ephemeral=True)
+
+
+class AFKConfigView(discord.ui.View):
+    def __init__(self, guild):
+        super().__init__(timeout=None)
+        self.guild = guild
+
+    @discord.ui.button(label="ตั้งสถานะ AFK", style=discord.ButtonStyle.primary, emoji="😴", row=0)
+    async def set_afk(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.send_modal(AFKReasonModal())
+
+    @discord.ui.button(label="ปลด AFK ของฉัน", style=discord.ButtonStyle.secondary, emoji="👋", row=0)
+    async def clear_afk(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if AFK_USERS.pop(interaction.user.id, None) is not None:
+            await interaction.response.send_message("👋 ปลดสถานะ AFK ให้แล้วค่ะ ยินดีต้อนรับกลับมาน้าา~", ephemeral=True)
+        else:
+            await interaction.response.send_message("ตอนนี้คุณไม่ได้ตั้ง AFK อยู่นะคะ", ephemeral=True)
+
+    @discord.ui.button(label="🔙 กลับหน้าแรก", style=discord.ButtonStyle.secondary, emoji="⬅️", row=1)
+    async def back(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.defer()
+        await interaction.message.edit(embed=generate_main_menu_embed(self.guild), view=BotControlMenuView(self.guild))
+
+
+class StickyMessageModal(discord.ui.Modal, title="📌 ตั้งข้อความปักหมุด"):
+    def __init__(self, channel):
+        super().__init__()
+        self.channel = channel
+        self.content_input = discord.ui.TextInput(
+            label="ข้อความที่จะปักหมุด", style=discord.TextStyle.paragraph, max_length=2000,
+        )
+        self.add_item(self.content_input)
+
+    async def on_submit(self, interaction: discord.Interaction):
+        await interaction.response.defer(ephemeral=True)
+        content = self.content_input.value.strip()
+        old = STICKY_MESSAGES.pop(self.channel.id, None)
+        if old:
+            try:
+                old_msg = await self.channel.fetch_message(old["message_id"])
+                await old_msg.delete()
+            except Exception:
+                pass
+        try:
+            sent = await self.channel.send(f"📌 **ข้อความปักหมุด:**\n{content}")
+        except Exception as e:
+            return await interaction.followup.send(f"❌ ส่งข้อความไม่สำเร็จ: {type(e).__name__}", ephemeral=True)
+        STICKY_MESSAGES[self.channel.id] = {"content": content, "message_id": sent.id}
+        await interaction.followup.send(f"✅ ตั้งข้อความปักหมุดในห้อง {self.channel.mention} เรียบร้อยค่ะ", ephemeral=True)
+
+
+class StickyConfigView(discord.ui.View):
+    def __init__(self, guild):
+        super().__init__(timeout=None)
+        self.guild = guild
+        self.selected_channel = None
+
+    @discord.ui.select(cls=discord.ui.ChannelSelect, channel_types=[discord.ChannelType.text],
+                        placeholder="📍 เลือกห้องที่จะตั้ง/ปิด sticky...", row=0)
+    async def channel_select(self, interaction: discord.Interaction, select: discord.ui.ChannelSelect):
+        self.selected_channel = select.values[0]
+        await interaction.response.send_message(
+            f"เลือกห้อง {self.selected_channel.mention} แล้วค่ะ กดปุ่ม 'ตั้งข้อความปักหมุด' ด้านล่างต่อได้เลย",
+            ephemeral=True,
+        )
+
+    @discord.ui.button(label="ตั้งข้อความปักหมุด", style=discord.ButtonStyle.success, emoji="📌", row=1)
+    async def set_sticky(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if not interaction.user.guild_permissions.manage_messages:
+            return await interaction.response.send_message("❌ ต้องมีสิทธิ์ Manage Messages ถึงจะตั้ง sticky ได้ค่ะ", ephemeral=True)
+        if not self.selected_channel:
+            return await interaction.response.send_message("❌ กรุณาเลือกห้องจากเมนูด้านบนก่อนค่ะ", ephemeral=True)
+        await interaction.response.send_modal(StickyMessageModal(self.selected_channel))
+
+    @discord.ui.button(label="ปิด Sticky ของห้องที่เลือก", style=discord.ButtonStyle.danger, emoji="🚫", row=1)
+    async def clear_sticky(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if not interaction.user.guild_permissions.manage_messages:
+            return await interaction.response.send_message("❌ ต้องมีสิทธิ์ Manage Messages ถึงจะปิด sticky ได้ค่ะ", ephemeral=True)
+        if not self.selected_channel:
+            return await interaction.response.send_message("❌ กรุณาเลือกห้องจากเมนูด้านบนก่อนค่ะ", ephemeral=True)
+        await interaction.response.defer(ephemeral=True)
+        old = STICKY_MESSAGES.pop(self.selected_channel.id, None)
+        if old:
+            try:
+                old_msg = await self.selected_channel.fetch_message(old["message_id"])
+                await old_msg.delete()
+            except Exception:
+                pass
+            await interaction.followup.send(f"🚫 ปิด sticky ของห้อง {self.selected_channel.mention} แล้วค่ะ", ephemeral=True)
+        else:
+            await interaction.followup.send("ห้องนี้ไม่มี sticky ตั้งอยู่ค่ะ", ephemeral=True)
+
+    @discord.ui.button(label="🔙 กลับหน้าแรก", style=discord.ButtonStyle.secondary, emoji="⬅️", row=2)
     async def back(self, interaction: discord.Interaction, button: discord.ui.Button):
         await interaction.response.defer()
         await interaction.message.edit(embed=generate_main_menu_embed(self.guild), view=BotControlMenuView(self.guild))
