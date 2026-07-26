@@ -285,6 +285,7 @@ class BotCommandControlSelect(discord.ui.Select):
             discord.SelectOption(label="🛡️ เปิดระบบจัดการ/ขอยศ", description="เรียกเมนู Dropdown เลือกรับยศ และปุ่มขอยศสุดน่ารัก", value="setup_roles"),
             discord.SelectOption(label="📊 เปิดระบบสร้างคำถามโพล", description="สร้างโพลน่ารัก ๆ เพื่อโหวตเลือกคำตอบกันเถอะ", value="setup_poll"),
             discord.SelectOption(label="🎮 รวมลิงก์ Private Server Roblox", description="คลังแสงลิงก์เซิร์ฟเวอร์วีเกมต่าง ๆ ของชาว Robloxค๊าา", value="roblox_servers"),
+            discord.SelectOption(label="🎁 เช็คโค้ดเกม Roblox", description="ดูโค้ดล่าสุดของเกมยอดฮิต พร้อมปุ่มคัดลอกโค้ด", value="game_codes"),
             discord.SelectOption(label="🚫 เริ่มวาระโหวตเตะสมาชิก", description="เลือกคนที่ทำตัวไม่น่ารักเพื่อเริ่มโหวตเตะกันค่ะ!", value="setup_kick"),
             discord.SelectOption(label="📊 ตรวจสอบข้อมูลสมาชิกกลุ่ม (NEW!)", description="เช็คสถิติแบบเรียลไทม์ ตรวจสอบแอดมิน และคนไม่มียศค๊าา", value="setup_analytics"),
             discord.SelectOption(label="📖 ดูคู่มือคำสั่งบอททั้งหมด", description="มาดูคู่มือการสั่งงานและบันทึกความสามารถน้อน Doro กันงับ", value="show_commands")
@@ -321,6 +322,13 @@ class BotCommandControlSelect(discord.ui.Select):
         elif value == "roblox_servers":
             embed = discord.Embed(title="🎮 คลังแสง Private Server ของแก๊งเรา! 🚀", description="อยากไปฟาร์ม ไปเวล หรือไปตึงเกมไหน เลือกชื่อเกมจากเมนูด้านล่างนี้ได้เลยค๊าา\n(สำหรับแอดมินสามารถกดปุ่มเพื่อเพิ่มหรือลบเกมได้เลยนะค๊าา) ✨", color=0x00E5FF)
             await interaction.message.edit(embed=embed, view=RobloxServerView(current_guild))
+        elif value == "game_codes":
+            embed = discord.Embed(
+                title="🎮 ระบบเช็คโค้ดเกม Roblox",
+                description="เลือกเกมจากเมนูด้านล่างเลยค่ะ หนูจะไปหาโค้ดล่าสุดมาให้น้าา~ 🔍",
+                color=0xFFB6C1,
+            )
+            await interaction.message.edit(embed=embed, view=GameCodeView())
         elif value == "setup_kick":
             embed = discord.Embed(title="🚫 ระบบโหวตเตะสมาชิก (โหมด Doro เอาจริง!)", description="โปรดเลือกรายชื่อคนที่ไม่น่ารักที่คุณต้องการเริ่มโหวตลงมติเตะด้านล่างนี้ได้เลยค่ะงึมมม", color=discord.Color.red())
             await interaction.message.edit(embed=embed, view=MemberSelectView(current_guild))
