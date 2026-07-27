@@ -441,7 +441,7 @@ async def check_new_game_codes():
                 except Exception as e:
                     logger.warning(f"code announce send failed (guild {cfg.get('_id')}): {type(e).__name__}: {e}")
 
-        await asyncio.sleep(2)  # เว้นจังหวะระหว่างเกมนิดนึง กันยิงเว็บถี่เกินไป
+        await asyncio.sleep(15 + random.uniform(0, 10))  # เว้นจังหวะระหว่างเกมให้นานขึ้นมาก + สุ่มเวลานิดหน่อย กันโดนมองว่าเป็นบอทยิงรัว
 
 @check_new_game_codes.before_loop
 async def before_check_new_game_codes():
@@ -1930,8 +1930,15 @@ GAME_CODE_SOURCES = {
 CODE_FETCH_HEADERS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
                   "(KHTML, like Gecko) Chrome/124.0 Safari/537.36",
-    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
     "Accept-Language": "en-US,en;q=0.9,th;q=0.8",
+    "Accept-Encoding": "gzip, deflate, br",
+    "Referer": "https://www.google.com/",
+    "Connection": "keep-alive",
+    "Sec-Fetch-Dest": "document",
+    "Sec-Fetch-Mode": "navigate",
+    "Sec-Fetch-Site": "cross-site",
+    "Upgrade-Insecure-Requests": "1",
 }
 
 
@@ -2018,12 +2025,23 @@ def parse_codes_from_html(html: str) -> list[tuple[str, str]]:
     return codes
 
 
-async def fetch_game_codes(url: str) -> list[tuple[str, str]]:
-    async with aiohttp.ClientSession(headers=CODE_FETCH_HEADERS) as session:
-        async with session.get(url, timeout=aiohttp.ClientTimeout(total=15)) as resp:
-            resp.raise_for_status()
-            html = await resp.text()
-    return parse_codes_from_html(html)
+async def fetch_game_codes(url: str, retries: int = 2) -> list[tuple[str, str]]:
+    last_error = None
+    for attempt in range(retries + 1):
+        try:
+            async with aiohttp.ClientSession(headers=CODE_FETCH_HEADERS) as session:
+                async with session.get(url, timeout=aiohttp.ClientTimeout(total=15)) as resp:
+                    resp.raise_for_status()
+                    html = await resp.text()
+            return parse_codes_from_html(html)
+        except aiohttp.ClientResponseError as e:
+            last_error = e
+            if e.status in (403, 429) and attempt < retries:
+                # โดนบล็อกชั่วคราว รอสักพักแล้วลองใหม่ ก่อนจะยอมแพ้ไปใช้โค้ดสำรอง
+                await asyncio.sleep(5 * (attempt + 1))
+                continue
+            raise
+    raise last_error
 
 
 def build_codes_embed(game_label: str, source_url: str, codes: list[tuple[str, str]], from_manual: bool = False) -> discord.Embed:
