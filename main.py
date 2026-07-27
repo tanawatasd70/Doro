@@ -2138,7 +2138,7 @@ class GameCodeSelect(discord.ui.Select):
 class CodeCopyButton(discord.ui.Button):
     """ปุ่มคัดลอกโค้ด กดแล้วบอทจะส่งโค้ดนั้นมาเป็นข้อความ ephemeral ให้กดคัดลอกได้ทันที"""
     def __init__(self, code: str, row: int):
-        super().__init__(label=f"📋 {code}"[:80], style=discord.ButtonStyle.secondary, row=row)
+        super().__init__(label=f"📋 คัดลอก: {code}"[:80], style=discord.ButtonStyle.secondary, row=row)
         self.code = code
 
     async def callback(self, interaction: discord.Interaction):
