@@ -2103,6 +2103,23 @@ def build_codes_embed(game_label: str, source_url: str, codes: list[tuple[str, s
     return embed
 
 
+async def _close_ui_message(interaction: discord.Interaction):
+    """ปิดเมนู UI นี้ (ใช้ร่วมกันได้ทุกเมนูโค้ดเกม)"""
+    try:
+        await interaction.response.edit_message(content="✅ ปิดเมนูแล้วค่ะ", embed=None, view=None)
+    except Exception:
+        try:
+            await interaction.response.send_message("✅ ปิดเมนูแล้วค่ะ", ephemeral=True)
+        except Exception:
+            pass
+
+
+async def _back_to_game_codes_menu(interaction: discord.Interaction):
+    """ย้อนกลับไปหน้าเมนูเลือกเกมโค้ดหลัก"""
+    embed, view = await _build_game_codes_view(interaction.guild)
+    await interaction.response.edit_message(content=None, embed=embed, view=view)
+
+
 class GameCodeSelect(discord.ui.Select):
     def __init__(self):
         options = [
@@ -2166,13 +2183,17 @@ class GameCodeView(discord.ui.View):
             "เลือกเกมที่จะลบโค้ดออกค่ะ:", view=RemoveCodeAdminView(), ephemeral=True
         )
 
-    @discord.ui.button(label="ตั้งห้องประกาศโค้ดใหม่", style=discord.ButtonStyle.primary, emoji="📢", row=3)
+    @discord.ui.button(label="ตั้งห้องประกาศโค้ดใหม่", style=discord.ButtonStyle.secondary, emoji="📢", row=3)
     async def announce_setup_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
         if not interaction.user.guild_permissions.manage_guild:
             return await interaction.response.send_message("❌ ต้องมีสิทธิ์ Manage Server ถึงจะตั้งค่านี้ได้ค่ะ", ephemeral=True)
         await interaction.response.send_message(
             "ตั้งค่าห้องประกาศเมื่อมีโค้ดใหม่ออกได้ที่นี่ค่ะ:", view=CodeAnnounceConfigView(interaction.guild), ephemeral=True
         )
+
+    @discord.ui.button(label="ปิด", style=discord.ButtonStyle.danger, emoji="❌", row=4)
+    async def close_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await _close_ui_message(interaction)
 
 
 class GameCodeResultView(GameCodeView):
@@ -2183,6 +2204,12 @@ class GameCodeResultView(GameCodeView):
         for idx, (code, _desc) in enumerate(codes[:10]):
             row = 1 + (idx // 5)  # แถว 1 และ 2
             self.add_item(CodeCopyButton(code, row))
+        back_btn = discord.ui.Button(label="ย้อนกลับ", style=discord.ButtonStyle.secondary, emoji="↩️", row=4)
+        back_btn.callback = self._back_callback
+        self.add_item(back_btn)
+
+    async def _back_callback(self, interaction: discord.Interaction):
+        await _back_to_game_codes_menu(interaction)
 
 
 # ------------------------------------------
@@ -2249,6 +2276,14 @@ class AddCodeAdminView(discord.ui.View):
         super().__init__(timeout=120)
         self.add_item(AddCodeGameSelect())
 
+    @discord.ui.button(label="ย้อนกลับ", style=discord.ButtonStyle.secondary, emoji="↩️", row=1)
+    async def back_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await _back_to_game_codes_menu(interaction)
+
+    @discord.ui.button(label="ปิด", style=discord.ButtonStyle.danger, emoji="❌", row=1)
+    async def close_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await _close_ui_message(interaction)
+
 
 class RemoveCodeGameSelect(discord.ui.Select):
     def __init__(self):
@@ -2289,11 +2324,29 @@ class RemoveCodePickView(discord.ui.View):
         super().__init__(timeout=120)
         self.add_item(RemoveCodePicker(game_key, entries))
 
+    @discord.ui.button(label="ย้อนกลับ", style=discord.ButtonStyle.secondary, emoji="↩️", row=1)
+    async def back_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.edit_message(
+            content="เลือกเกมที่จะลบโค้ดออกค่ะ:", embed=None, view=RemoveCodeAdminView()
+        )
+
+    @discord.ui.button(label="ปิด", style=discord.ButtonStyle.danger, emoji="❌", row=1)
+    async def close_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await _close_ui_message(interaction)
+
 
 class RemoveCodeAdminView(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=120)
         self.add_item(RemoveCodeGameSelect())
+
+    @discord.ui.button(label="ย้อนกลับ", style=discord.ButtonStyle.secondary, emoji="↩️", row=1)
+    async def back_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await _back_to_game_codes_menu(interaction)
+
+    @discord.ui.button(label="ปิด", style=discord.ButtonStyle.danger, emoji="❌", row=1)
+    async def close_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await _close_ui_message(interaction)
 
 
 # ------------------------------------------
@@ -2355,6 +2408,14 @@ class CodeAnnounceConfigView(discord.ui.View):
         await unset_announce_channel(self.guild.id, self.selected_game)
         info = GAME_CODE_SOURCES[self.selected_game]
         await interaction.response.send_message(f"🚫 ปิดประกาศโค้ดใหม่อัตโนมัติของ **{info['label']}** แล้วค่ะ", ephemeral=True)
+
+    @discord.ui.button(label="ย้อนกลับ", style=discord.ButtonStyle.secondary, emoji="↩️", row=3)
+    async def back_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await _back_to_game_codes_menu(interaction)
+
+    @discord.ui.button(label="ปิด", style=discord.ButtonStyle.danger, emoji="❌", row=3)
+    async def close_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await _close_ui_message(interaction)
 
 
 # ==========================================
