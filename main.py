@@ -2142,7 +2142,7 @@ class CodeCopyButton(discord.ui.Button):
         self.code = code
 
     async def callback(self, interaction: discord.Interaction):
-        await interaction.response.send_message(f"📋 คัดลอกโค้ดนี้ได้เลยค่ะ:\n`{self.code}`", ephemeral=True)
+        await interaction.response.send_message(f"📋 กดไอคอนคัดลอกที่มุมกล่องด้านล่างได้เลยค่ะ (มือถือกดค้างที่โค้ด):\n```\n{self.code}\n```", ephemeral=True)
 
 
 class GameCodeView(discord.ui.View):
