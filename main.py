@@ -1,4 +1,5 @@
 import os
+import re
 import json
 import random
 import asyncio
@@ -8,9 +9,10 @@ import discord
 import yt_dlp
 import aiohttp
 import motor.motor_asyncio
+from bson import ObjectId
 from bs4 import BeautifulSoup
-from datetime import datetime
-from discord.ext import commands
+from datetime import datetime, timedelta, timezone
+from discord.ext import commands, tasks
 from dotenv import load_dotenv
 from youtubesearchpython import VideosSearch
 
@@ -62,6 +64,9 @@ manual_codes_col = db["manual_codes"]    # _id: game_key -> {entries: [{code, de
 welcome_col = db["welcome_config"]       # _id: guild_id -> {config: {channel_id, autorole_id}}
 sticky_col = db["sticky_messages"]       # _id: channel_id -> {content, message_id}
 afk_col = db["afk_users"]                # _id: user_id -> {reason}
+custom_responses_col = db["custom_responses"]  # _id: guild_id -> {responses: {trigger: reply}}
+reminders_col = db["reminders"]          # _id: auto -> {user_id, channel_id, guild_id, remind_at, message}
+warnings_col = db["warnings"]            # _id: auto -> {guild_id, user_id, reason, moderator_id, timestamp}
 
 intents = discord.Intents.default()
 intents.message_content = True
@@ -255,6 +260,78 @@ async def clear_afk(user_id: int):
     return doc["reason"] if doc else None
 
 
+# --- 💬 ข้อความตอบกลับอัตโนมัติ (Custom Auto-Responses) ---
+async def get_custom_responses(guild_id: int) -> dict:
+    doc = await custom_responses_col.find_one({"_id": guild_id})
+    return doc.get("responses", {}) if doc else {}
+
+async def add_custom_response(guild_id: int, trigger: str, reply: str):
+    await custom_responses_col.update_one({"_id": guild_id}, {"$set": {f"responses.{trigger}": reply}}, upsert=True)
+
+async def remove_custom_response(guild_id: int, trigger: str) -> bool:
+    doc = await custom_responses_col.find_one({"_id": guild_id})
+    if not doc or trigger not in doc.get("responses", {}):
+        return False
+    await custom_responses_col.update_one({"_id": guild_id}, {"$unset": {f"responses.{trigger}": ""}})
+    return True
+
+
+# --- ⏰ ระบบแจ้งเตือน (Reminders) ---
+DURATION_PATTERN = re.compile(r"(\d+)\s*(d|h|m|s|วัน|ชม|ชั่วโมง|นาที|วิ)", re.IGNORECASE)
+
+def parse_duration(text: str):
+    """แปลงข้อความเช่น '1d2h30m' หรือ '2h 30m' ให้เป็น timedelta ค่ะ คืนค่า None ถ้าอ่านไม่ออก"""
+    total_seconds = 0
+    found = False
+    for amount, unit in DURATION_PATTERN.findall(text.strip().lower()):
+        found = True
+        amount = int(amount)
+        unit = unit.lower()
+        if unit in ("d", "วัน"):
+            total_seconds += amount * 86400
+        elif unit in ("h", "ชม", "ชั่วโมง"):
+            total_seconds += amount * 3600
+        elif unit in ("m", "นาที"):
+            total_seconds += amount * 60
+        elif unit in ("s", "วิ"):
+            total_seconds += amount
+    if not found or total_seconds <= 0:
+        return None
+    return timedelta(seconds=total_seconds)
+
+async def create_reminder(user_id: int, channel_id, guild_id, remind_at: datetime, content: str):
+    result = await reminders_col.insert_one({
+        "user_id": user_id, "channel_id": channel_id, "guild_id": guild_id,
+        "remind_at": remind_at, "message": content,
+    })
+    return result.inserted_id
+
+async def get_due_reminders(now: datetime) -> list:
+    return [doc async for doc in reminders_col.find({"remind_at": {"$lte": now}})]
+
+async def get_user_reminders(user_id: int) -> list:
+    return [doc async for doc in reminders_col.find({"user_id": user_id}).sort("remind_at", 1)]
+
+async def delete_reminder(reminder_id):
+    await reminders_col.delete_one({"_id": reminder_id})
+
+
+# --- ⚠️ ระบบคำเตือนและ Mod-log (Warnings) ---
+async def add_warning(guild_id: int, user_id: int, reason: str, moderator_id: int):
+    result = await warnings_col.insert_one({
+        "guild_id": guild_id, "user_id": user_id, "reason": reason,
+        "moderator_id": moderator_id, "timestamp": datetime.utcnow(),
+    })
+    return result.inserted_id
+
+async def get_warnings(guild_id: int, user_id: int) -> list:
+    return [doc async for doc in warnings_col.find({"guild_id": guild_id, "user_id": user_id}).sort("timestamp", -1)]
+
+async def delete_warning(warning_id) -> bool:
+    result = await warnings_col.delete_one({"_id": warning_id})
+    return result.deleted_count > 0
+
+
 YTDL_OPTIONS = {
     'format': 'bestaudio/best',
     'noplaylist': True,
@@ -286,6 +363,33 @@ def play_next_song(guild_id, vc, channel):
 
 async def refresh_main_menu_msg(guild_id, channel):
     pass
+
+# ==========================================
+# ⏰ REMINDER BACKGROUND TASK LOOP
+# ==========================================
+@tasks.loop(seconds=30)
+async def check_reminders():
+    now = datetime.utcnow()
+    due = await get_due_reminders(now)
+    for r in due:
+        try:
+            content = f"⏰ **แจ้งเตือน!** {r['message']}"
+            if r.get("channel_id"):
+                channel = bot.get_channel(r["channel_id"])
+                if channel:
+                    await channel.send(f"<@{r['user_id']}> {content}")
+            else:
+                user = await bot.fetch_user(r["user_id"])
+                if user:
+                    await user.send(content)
+        except Exception as e:
+            logger.warning(f"reminder send failed: {type(e).__name__}: {e}")
+        finally:
+            await delete_reminder(r["_id"])
+
+@check_reminders.before_loop
+async def before_check_reminders():
+    await bot.wait_until_ready()
 # ==========================================
 # 🔍 MUSIC SEARCH MODAL
 # ==========================================
@@ -551,6 +655,343 @@ async def _build_help_view(guild):
     return embed, BackToMainOnlyView(guild)
 
 
+# ==========================================
+# 💬 CUSTOM AUTO-RESPONSES
+# ==========================================
+class AddCustomResponseModal(discord.ui.Modal, title="➕ เพิ่มข้อความตอบกลับอัตโนมัติ"):
+    def __init__(self, guild_id: int):
+        super().__init__()
+        self.guild_id = guild_id
+        self.trigger_input = discord.ui.TextInput(
+            label="คำที่ต้องการให้บอทจับ (พิมพ์เล็กทั้งหมด)",
+            placeholder="เช่น doro กินข้าวยัง", max_length=200, required=True,
+        )
+        self.reply_input = discord.ui.TextInput(
+            label="ข้อความที่บอทจะตอบกลับ", style=discord.TextStyle.paragraph,
+            max_length=1500, required=True,
+        )
+        self.add_item(self.trigger_input)
+        self.add_item(self.reply_input)
+
+    async def on_submit(self, interaction: discord.Interaction):
+        trigger = self.trigger_input.value.strip().lower()
+        reply = self.reply_input.value.strip()
+        await add_custom_response(self.guild_id, trigger, reply)
+        await interaction.response.send_message(f"✅ เพิ่มข้อความตอบกลับสำหรับคำว่า `{trigger}` เรียบร้อยค่ะ", ephemeral=True)
+
+
+class RemoveCustomResponseModal(discord.ui.Modal, title="🗑️ ลบข้อความตอบกลับอัตโนมัติ"):
+    def __init__(self, guild_id: int):
+        super().__init__()
+        self.guild_id = guild_id
+        self.trigger_input = discord.ui.TextInput(
+            label="พิมพ์คำที่ต้องการลบให้ตรงเป๊ะ", placeholder="เช่น doro กินข้าวยัง", required=True,
+        )
+        self.add_item(self.trigger_input)
+
+    async def on_submit(self, interaction: discord.Interaction):
+        trigger = self.trigger_input.value.strip().lower()
+        removed = await remove_custom_response(self.guild_id, trigger)
+        if removed:
+            await interaction.response.send_message(f"🗑️ ลบข้อความตอบกลับ `{trigger}` แล้วค่ะ", ephemeral=True)
+        else:
+            await interaction.response.send_message(f"❌ หาไม่เจอคำว่า `{trigger}` ในรายการที่ตั้งไว้ค่ะ", ephemeral=True)
+
+
+class CustomResponseConfigView(discord.ui.View):
+    def __init__(self, guild):
+        super().__init__(timeout=None)
+        self.guild = guild
+
+    @discord.ui.button(label="ดูรายการทั้งหมด", style=discord.ButtonStyle.primary, emoji="📋", row=0)
+    async def view_list(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.defer(ephemeral=True)
+        dynamic = await get_custom_responses(self.guild.id)
+        lines = []
+        if custom_responses:
+            lines.append("**🌸 ค่าเริ่มต้นของระบบ:**")
+            lines.extend(f"🔹 `{k}`" for k in custom_responses)
+        if dynamic:
+            lines.append("\n**⚙️ ตั้งเพิ่มเองในเซิร์ฟนี้:**")
+            lines.extend(f"🔸 `{k}` → {v[:60]}" for k, v in dynamic.items())
+        if not lines:
+            lines = ["ยังไม่มีข้อความตอบกลับอัตโนมัติเลยค่ะ"]
+        embed = discord.Embed(title="📋 รายการข้อความตอบกลับอัตโนมัติ", description="\n".join(lines)[:4000], color=0x9B59B6)
+        await interaction.followup.send(embed=embed, ephemeral=True)
+
+    @discord.ui.button(label="เพิ่มข้อความตอบกลับ", style=discord.ButtonStyle.success, emoji="➕", row=0)
+    async def add_response(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if not interaction.user.guild_permissions.manage_guild:
+            return await interaction.response.send_message("❌ ต้องมีสิทธิ์ Manage Server ถึงจะเพิ่มได้ค่ะ", ephemeral=True)
+        await interaction.response.send_modal(AddCustomResponseModal(self.guild.id))
+
+    @discord.ui.button(label="ลบข้อความตอบกลับ", style=discord.ButtonStyle.danger, emoji="🗑️", row=0)
+    async def remove_response(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if not interaction.user.guild_permissions.manage_guild:
+            return await interaction.response.send_message("❌ ต้องมีสิทธิ์ Manage Server ถึงจะลบได้ค่ะ", ephemeral=True)
+        await interaction.response.send_modal(RemoveCustomResponseModal(self.guild.id))
+
+    @discord.ui.button(label="🔙 กลับหน้าแรก", style=discord.ButtonStyle.secondary, emoji="⬅️", row=1)
+    async def back(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.defer()
+        await interaction.message.edit(embed=generate_main_menu_embed(self.guild), view=BotControlMenuView(self.guild))
+
+
+# ==========================================
+# 🪪 SERVER / USER INFO CARDS
+# ==========================================
+class UserInfoSelect(discord.ui.UserSelect):
+    def __init__(self, guild):
+        super().__init__(placeholder="👤 เลือกสมาชิกที่ต้องการดูข้อมูล...", row=0)
+        self.guild = guild
+
+    async def callback(self, interaction: discord.Interaction):
+        await interaction.response.defer()
+        member = self.guild.get_member(self.values[0].id)
+        if not member:
+            return
+        roles = [r.mention for r in reversed(member.roles) if r.name != "@everyone"]
+        embed = discord.Embed(
+            title=f"👤 ข้อมูลสมาชิก: {member.display_name}",
+            color=member.color if member.color.value else 0x3498DB,
+        )
+        embed.set_thumbnail(url=member.display_avatar.url)
+        embed.add_field(name="🏷️ ชื่อผู้ใช้", value=str(member), inline=True)
+        embed.add_field(name="🆔 User ID", value=str(member.id), inline=True)
+        embed.add_field(name="🤖 บอท?", value="ใช่" if member.bot else "ไม่ใช่", inline=True)
+        embed.add_field(name="📅 สมัคร Discord เมื่อ", value=discord.utils.format_dt(member.created_at, style="D"), inline=True)
+        embed.add_field(name="📥 เข้าเซิร์ฟเมื่อ", value=discord.utils.format_dt(member.joined_at, style="D") if member.joined_at else "ไม่ทราบ", inline=True)
+        embed.add_field(name="🟢 สถานะ", value=str(member.status).title(), inline=True)
+        embed.add_field(name=f"🎭 ยศทั้งหมด ({len(roles)})", value=", ".join(roles[:15]) if roles else "ไม่มียศ", inline=False)
+        await interaction.message.edit(embed=embed, view=InfoCardView(self.guild))
+
+
+class InfoCardView(discord.ui.View):
+    def __init__(self, guild):
+        super().__init__(timeout=None)
+        self.guild = guild
+        self.add_item(UserInfoSelect(guild))
+
+    @discord.ui.button(label="ข้อมูลเซิร์ฟเวอร์", style=discord.ButtonStyle.primary, emoji="🏠", row=1)
+    async def server_info(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.defer()
+        guild = self.guild
+        embed = discord.Embed(title=f"🏠 ข้อมูลเซิร์ฟเวอร์: {guild.name}", color=0x1ABC9C)
+        if guild.icon:
+            embed.set_thumbnail(url=guild.icon.url)
+        embed.add_field(name="👑 เจ้าของเซิร์ฟ", value=str(guild.owner) if guild.owner else "ไม่ทราบ", inline=True)
+        embed.add_field(name="🆔 Server ID", value=str(guild.id), inline=True)
+        embed.add_field(name="📅 สร้างเมื่อ", value=discord.utils.format_dt(guild.created_at, style="D"), inline=True)
+        embed.add_field(name="👥 จำนวนสมาชิก", value=str(guild.member_count), inline=True)
+        embed.add_field(name="🗂️ จำนวนห้อง", value=str(len(guild.channels)), inline=True)
+        embed.add_field(name="🎭 จำนวนยศ", value=str(len(guild.roles)), inline=True)
+        embed.add_field(name="🚀 ระดับ Boost", value=f"Level {guild.premium_tier} ({guild.premium_subscription_count} boosts)", inline=True)
+        await interaction.message.edit(embed=embed, view=self)
+
+    @discord.ui.button(label="🔙 กลับหน้าแรก", style=discord.ButtonStyle.secondary, emoji="⬅️", row=2)
+    async def back(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.defer()
+        await interaction.message.edit(embed=generate_main_menu_embed(self.guild), view=BotControlMenuView(self.guild))
+
+
+# ==========================================
+# ⏰ REMINDERS
+# ==========================================
+class ReminderModal(discord.ui.Modal, title="⏰ ตั้งการแจ้งเตือน"):
+    def __init__(self, channel):
+        super().__init__()
+        self.channel = channel
+        self.time_input = discord.ui.TextInput(
+            label="เวลา (เช่น 10m, 2h, 1d3h30m)",
+            placeholder="ใช้ d=วัน h=ชม m=นาที s=วิ เช่น 1h30m", required=True, max_length=50,
+        )
+        self.message_input = discord.ui.TextInput(
+            label="ข้อความที่จะแจ้งเตือน", style=discord.TextStyle.paragraph, max_length=1000, required=True,
+        )
+        self.dm_input = discord.ui.TextInput(
+            label="ส่งเป็น DM ไหม? (พิมพ์ ใช่ หรือ ไม่)", placeholder="ไม่ (ค่าเริ่มต้น = ส่งในห้องนี้)", required=False, max_length=10,
+        )
+        self.add_item(self.time_input)
+        self.add_item(self.message_input)
+        self.add_item(self.dm_input)
+
+    async def on_submit(self, interaction: discord.Interaction):
+        delta = parse_duration(self.time_input.value)
+        if not delta:
+            return await interaction.response.send_message(
+                "❌ อ่านรูปแบบเวลาไม่ออกค่ะ ลองใหม่เช่น `10m`, `2h`, `1d3h30m` นะคะ", ephemeral=True,
+            )
+        remind_at = datetime.utcnow() + delta
+        want_dm = self.dm_input.value.strip().lower() in ("ใช่", "yes", "y", "dm")
+        target_channel_id = None if want_dm else self.channel.id
+        await create_reminder(
+            user_id=interaction.user.id,
+            channel_id=target_channel_id,
+            guild_id=interaction.guild.id if interaction.guild else None,
+            remind_at=remind_at,
+            content=self.message_input.value.strip(),
+        )
+        where = "ทาง DM" if want_dm else f"ในห้อง {self.channel.mention}"
+        await interaction.response.send_message(
+            f"⏰ ตั้งการแจ้งเตือนแล้วค่ะ! หนูจะเตือน{where} ในอีก **{self.time_input.value.strip()}** น้าา", ephemeral=True,
+        )
+
+
+class ReminderConfigView(discord.ui.View):
+    def __init__(self, guild):
+        super().__init__(timeout=None)
+        self.guild = guild
+
+    @discord.ui.button(label="ตั้งการแจ้งเตือนใหม่", style=discord.ButtonStyle.success, emoji="⏰", row=0)
+    async def new_reminder(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.send_modal(ReminderModal(interaction.channel))
+
+    @discord.ui.button(label="ดูรายการแจ้งเตือนของฉัน", style=discord.ButtonStyle.primary, emoji="📋", row=0)
+    async def list_reminders(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.defer(ephemeral=True)
+        reminders = await get_user_reminders(interaction.user.id)
+        if not reminders:
+            return await interaction.followup.send("ยังไม่มีการแจ้งเตือนที่ตั้งไว้เลยค่ะ", ephemeral=True)
+        lines = []
+        for r in reminders[:15]:
+            ts = discord.utils.format_dt(r["remind_at"].replace(tzinfo=timezone.utc), style="R")
+            lines.append(f"🔹 {ts} — {r['message'][:80]}")
+        embed = discord.Embed(title="📋 รายการแจ้งเตือนของคุณ", description="\n".join(lines), color=0xF39C12)
+        await interaction.followup.send(embed=embed, ephemeral=True)
+
+    @discord.ui.button(label="🔙 กลับหน้าแรก", style=discord.ButtonStyle.secondary, emoji="⬅️", row=1)
+    async def back(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.defer()
+        await interaction.message.edit(embed=generate_main_menu_embed(self.guild), view=BotControlMenuView(self.guild))
+
+
+# ==========================================
+# ⚠️ WARNINGS / MOD-LOG
+# ==========================================
+class WarningReasonModal(discord.ui.Modal, title="⚠️ เพิ่มคำเตือนสมาชิก"):
+    def __init__(self, guild_id: int, target: discord.Member, moderator_id: int):
+        super().__init__()
+        self.guild_id = guild_id
+        self.target = target
+        self.moderator_id = moderator_id
+        self.reason_input = discord.ui.TextInput(
+            label="เหตุผลของคำเตือน", style=discord.TextStyle.paragraph, max_length=500, required=True,
+        )
+        self.add_item(self.reason_input)
+
+    async def on_submit(self, interaction: discord.Interaction):
+        await add_warning(self.guild_id, self.target.id, self.reason_input.value.strip(), self.moderator_id)
+        await interaction.response.send_message(f"⚠️ เพิ่มคำเตือนให้ **{self.target.display_name}** เรียบร้อยค่ะ", ephemeral=True)
+
+
+class DeleteWarningSelect(discord.ui.Select):
+    def __init__(self, warnings: list):
+        options = [
+            discord.SelectOption(label=w["reason"][:90] or "(ไม่มีรายละเอียด)", description=f"ID: {str(w['_id'])[-6:]}", value=str(w["_id"]))
+            for w in warnings[:25]
+        ]
+        super().__init__(placeholder="🗑️ เลือกคำเตือนที่ต้องการลบ...", options=options)
+
+    async def callback(self, interaction: discord.Interaction):
+        if not (interaction.user.guild_permissions.kick_members or interaction.user.guild_permissions.manage_messages):
+            return await interaction.response.send_message("❌ ต้องมีสิทธิ์ถึงจะลบคำเตือนได้ค่ะ", ephemeral=True)
+        removed = await delete_warning(ObjectId(self.values[0]))
+        if removed:
+            await interaction.response.send_message("🗑️ ลบคำเตือนนั้นแล้วค่ะ", ephemeral=True)
+        else:
+            await interaction.response.send_message("❌ ลบไม่สำเร็จ อาจถูกลบไปแล้วค่ะ", ephemeral=True)
+
+
+class WarningTargetSelect(discord.ui.UserSelect):
+    def __init__(self, guild):
+        super().__init__(placeholder="👤 เลือกสมาชิกที่ต้องการจัดการคำเตือน...", row=0)
+        self.guild = guild
+
+    async def callback(self, interaction: discord.Interaction):
+        member = self.guild.get_member(self.values[0].id)
+        if not member:
+            return await interaction.response.send_message("❌ หาสมาชิกคนนี้ในเซิร์ฟไม่เจอค่ะ", ephemeral=True)
+        view: WarningConfigView = self.view
+        view.selected_member = member
+        await interaction.response.send_message(f"เลือก **{member.display_name}** แล้วค่ะ กดปุ่มด้านล่างต่อได้เลย", ephemeral=True)
+
+
+class WarningConfigView(discord.ui.View):
+    def __init__(self, guild):
+        super().__init__(timeout=None)
+        self.guild = guild
+        self.selected_member = None
+        self.add_item(WarningTargetSelect(guild))
+
+    @discord.ui.button(label="เพิ่มคำเตือน", style=discord.ButtonStyle.danger, emoji="⚠️", row=1)
+    async def add_warn(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if not (interaction.user.guild_permissions.kick_members or interaction.user.guild_permissions.manage_messages):
+            return await interaction.response.send_message("❌ ต้องมีสิทธิ์ Kick Members หรือ Manage Messages ถึงจะเตือนได้ค่ะ", ephemeral=True)
+        if not self.selected_member:
+            return await interaction.response.send_message("❌ กรุณาเลือกสมาชิกจากเมนูด้านบนก่อนค่ะ", ephemeral=True)
+        await interaction.response.send_modal(WarningReasonModal(self.guild.id, self.selected_member, interaction.user.id))
+
+    @discord.ui.button(label="ดูคำเตือน", style=discord.ButtonStyle.primary, emoji="📋", row=1)
+    async def view_warns(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if not self.selected_member:
+            return await interaction.response.send_message("❌ กรุณาเลือกสมาชิกจากเมนูด้านบนก่อนค่ะ", ephemeral=True)
+        await interaction.response.defer(ephemeral=True)
+        warnings = await get_warnings(self.guild.id, self.selected_member.id)
+        if not warnings:
+            return await interaction.followup.send(f"🎉 **{self.selected_member.display_name}** ยังไม่เคยโดนเตือนเลยค่ะ", ephemeral=True)
+        lines = []
+        for w in warnings[:15]:
+            mod = self.guild.get_member(w["moderator_id"])
+            mod_name = mod.display_name if mod else str(w["moderator_id"])
+            ts = discord.utils.format_dt(w["timestamp"].replace(tzinfo=timezone.utc), style="D")
+            lines.append(f"🔸 `{str(w['_id'])[-6:]}` — {w['reason'][:80]} _(โดย {mod_name}, {ts})_")
+        embed = discord.Embed(
+            title=f"⚠️ ประวัติคำเตือนของ {self.selected_member.display_name} ({len(warnings)} ครั้ง)",
+            description="\n".join(lines), color=0xE74C3C,
+        )
+        del_view = discord.ui.View(timeout=120)
+        del_view.add_item(DeleteWarningSelect(warnings))
+        await interaction.followup.send(embed=embed, view=del_view, ephemeral=True)
+
+    @discord.ui.button(label="🔙 กลับหน้าแรก", style=discord.ButtonStyle.secondary, emoji="⬅️", row=2)
+    async def back(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.defer()
+        await interaction.message.edit(embed=generate_main_menu_embed(self.guild), view=BotControlMenuView(self.guild))
+
+
+async def _build_custom_responses_view(guild):
+    embed = discord.Embed(
+        title="💬 ระบบข้อความตอบกลับอัตโนมัติ (Custom Auto-Responses)",
+        description="ตั้งคำที่ต้องการให้น้อน Doro จับและตอบกลับอัตโนมัติในเซิร์ฟนี้ได้เลยค่ะ\nกดปุ่มด้านล่างเพื่อดู เพิ่ม หรือลบรายการได้เลยน้าา ✨",
+        color=0x9B59B6,
+    )
+    return embed, CustomResponseConfigView(guild)
+
+async def _build_info_card_view(guild):
+    embed = discord.Embed(
+        title="🪪 การ์ดข้อมูลเซิร์ฟเวอร์และสมาชิก",
+        description="เลือกสมาชิกจากเมนูเพื่อดูการ์ดข้อมูล หรือกดปุ่มเพื่อดูข้อมูลเซิร์ฟเวอร์ได้เลยค่ะ ✨",
+        color=0x3498DB,
+    )
+    return embed, InfoCardView(guild)
+
+async def _build_reminder_view(guild):
+    embed = discord.Embed(
+        title="⏰ ระบบตั้งการแจ้งเตือน (Reminders)",
+        description="กดปุ่มด้านล่างเพื่อตั้งการแจ้งเตือนใหม่ หรือดูรายการที่ตั้งไว้ได้เลยค่ะ\nหนูจะเช็คทุก ๆ 30 วินาทีน้าา~ ⏱️",
+        color=0xF39C12,
+    )
+    return embed, ReminderConfigView(guild)
+
+async def _build_warnings_view(guild):
+    embed = discord.Embed(
+        title="⚠️ ระบบคำเตือนและ Mod-log",
+        description="เลือกสมาชิกจากเมนูด้านล่าง จากนั้นกดปุ่มเพื่อเพิ่มหรือดูคำเตือนได้เลยค่ะ\n*(ต้องมีสิทธิ์ Kick Members หรือ Manage Messages)*",
+        color=0xE74C3C,
+    )
+    return embed, WarningConfigView(guild)
+
+
 ACTION_REGISTRY = {
     "setup_music": {"label": "🎵 เปิดระบบควบคุมและเล่นเพลง", "description": "เข้าสู่หน้าต่างควบคุมมิวสิคบอร์ด เปิดเพลง/เลือกเพลงค๊าา", "build": _build_music_view},
     "setup_soundboard": {"label": "🔊 เปิดระบบ Soundboard", "description": "ปล่อยเสียงเอฟเฟกต์น่ารักๆ ในห้องเสียง", "build": _build_soundboard_view},
@@ -564,13 +1005,17 @@ ACTION_REGISTRY = {
     "setup_afk": {"label": "😴 ระบบ AFK", "description": "ตั้ง/ปลดสถานะไม่อยู่ พร้อมเหตุผลบอกคนที่มาแท็กหา", "build": _build_afk_view},
     "setup_sticky": {"label": "📌 ตั้งค่าข้อความปักหมุด (Sticky)", "description": "ปักข้อความให้ลอยอยู่ล่างสุดของห้องนี้เสมอ", "build": _build_sticky_view},
     "setup_analytics": {"label": "📊 ตรวจสอบข้อมูลสมาชิกกลุ่ม (NEW!)", "description": "เช็คสถิติแบบเรียลไทม์ ตรวจสอบแอดมิน และคนไม่มียศค๊าา", "build": _build_analytics_view},
+    "setup_custom_responses": {"label": "💬 ข้อความตอบกลับอัตโนมัติ", "description": "ตั้ง/ดู/ลบคำที่บอทจะตอบกลับอัตโนมัติในเซิร์ฟนี้", "build": _build_custom_responses_view},
+    "setup_warnings": {"label": "⚠️ คำเตือน & Mod-log", "description": "เพิ่ม/ดู/ลบคำเตือนของสมาชิก สำหรับทีมงาน", "build": _build_warnings_view},
+    "setup_info_cards": {"label": "🪪 การ์ดข้อมูลเซิร์ฟ/สมาชิก", "description": "ดูข้อมูลเซิร์ฟเวอร์หรือการ์ดข้อมูลของสมาชิกแต่ละคน", "build": _build_info_card_view},
+    "setup_reminders": {"label": "⏰ ตั้งการแจ้งเตือน (Reminders)", "description": "ตั้งเตือนตัวเองในอนาคต ผ่าน DM หรือในห้องแชท", "build": _build_reminder_view},
     "show_commands": {"label": "📖 ดูคู่มือคำสั่งบอททั้งหมด", "description": "มาดูคู่มือการสั่งงานและบันทึกความสามารถน้อน Doro กันงับ", "build": _build_help_view},
 }
 
 CATEGORY_REGISTRY = {
     "cat_music": {"label": "🎵 บันเทิง", "description": "เพลง และ Soundboard", "items": ["setup_music", "setup_soundboard"]},
-    "cat_manage": {"label": "🛡️ จัดการเซิร์ฟเวอร์", "description": "ล้างแชท / ยศ / โหวตเตะ / ต้อนรับ / AFK / Sticky", "items": ["setup_clear", "setup_roles", "setup_kick", "setup_welcome", "setup_afk", "setup_sticky"]},
-    "cat_info": {"label": "📊 ข้อมูล & โพล", "description": "สร้างโพล และเช็คสถิติสมาชิก", "items": ["setup_poll", "setup_analytics"]},
+    "cat_manage": {"label": "🛡️ จัดการเซิร์ฟเวอร์", "description": "ล้างแชท / ยศ / โหวตเตะ / ต้อนรับ / AFK / Sticky / ตอบกลับอัตโนมัติ / คำเตือน", "items": ["setup_clear", "setup_roles", "setup_kick", "setup_welcome", "setup_afk", "setup_sticky", "setup_custom_responses", "setup_warnings"]},
+    "cat_info": {"label": "📊 ข้อมูล & โพล", "description": "สร้างโพล / เช็คสถิติสมาชิก / การ์ดข้อมูล / แจ้งเตือน", "items": ["setup_poll", "setup_analytics", "setup_info_cards", "setup_reminders"]},
     "cat_roblox": {"label": "🎮 Roblox", "description": "ลิงก์เซิร์ฟและโค้ดเกม", "items": ["roblox_servers", "game_codes"]},
     "cat_help": {"label": "📖 คู่มือคำสั่ง", "description": "ดูคู่มือความสามารถของ Doro", "items": ["show_commands"]},
 }
@@ -1740,6 +2185,8 @@ async def on_ready():
             pass
     refresh_main_menu_msg = _refresh
     bot.add_view(DynamicGroupJoinView(role_id=0, emoji_str="🌸"))
+    if not check_reminders.is_running():
+        check_reminders.start()
     try:
         synced = await bot.tree.sync()
         logger.info(f"Synced {len(synced)} slash command(s)")
@@ -1848,6 +2295,11 @@ async def on_message(message: discord.Message):
     if lower_msg in custom_responses:
         await message.channel.send(custom_responses[lower_msg])
         return
+    if message.guild:
+        dynamic_responses = await get_custom_responses(message.guild.id)
+        if lower_msg in dynamic_responses:
+            await message.channel.send(dynamic_responses[lower_msg])
+            return
     if any(f"doro {k}" in lower_msg or f"doro{k}" in lower_msg for k in ["เมนู", "menu", "คำสั่งเพลง", "music"]):
         try: 
             await message.delete()
