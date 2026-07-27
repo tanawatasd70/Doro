@@ -7,6 +7,7 @@ import logging
 import discord
 import yt_dlp
 import aiohttp
+import motor.motor_asyncio
 from bs4 import BeautifulSoup
 from datetime import datetime
 from discord.ext import commands
@@ -43,8 +44,24 @@ DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")
 if not DISCORD_TOKEN:
     raise RuntimeError("DISCORD_TOKEN missing in environment.")
 
+MONGO_URI = os.getenv("MONGO_URI")
+if not MONGO_URI:
+    raise RuntimeError("MONGO_URI missing in environment. (ตั้งค่าใน Render > Environment)")
+
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("doro")
+
+# ==========================================
+# 🍃 MONGODB ATLAS CONNECTION
+# ==========================================
+mongo_client = motor.motor_asyncio.AsyncIOMotorClient(MONGO_URI)
+db = mongo_client["doro_bot"]
+
+roblox_col = db["roblox_servers"]        # _id: game_key -> {name, url, image}
+manual_codes_col = db["manual_codes"]    # _id: game_key -> {entries: [{code, desc}, ...]}
+welcome_col = db["welcome_config"]       # _id: guild_id -> {config: {channel_id, autorole_id}}
+sticky_col = db["sticky_messages"]       # _id: channel_id -> {content, message_id}
+afk_col = db["afk_users"]                # _id: user_id -> {reason}
 
 intents = discord.Intents.default()
 intents.message_content = True
@@ -63,20 +80,27 @@ custom_responses = {
 
 vote_records = {}  
 poll_result_messages = {} 
-JSON_FILE = "roblox_servers.json"
 
-def load_roblox_data():
-    try:
-        with open(JSON_FILE, "r", encoding="utf-8") as f: 
-            return json.load(f)
-    except FileNotFoundError:
+async def load_roblox_data() -> dict:
+    data = {}
+    async for doc in roblox_col.find():
+        entry = {"name": doc["name"], "url": doc["url"]}
+        if doc.get("image"):
+            entry["image"] = doc["image"]
+        data[doc["_id"]] = entry
+    if not data:
         default_data = {"blox_fruits": {"name": "🏴‍☠️ Blox Fruits", "url": "https://www.roblox.com/"}}
-        save_roblox_data(default_data)
+        await save_roblox_data(default_data)
         return default_data
+    return data
 
-def save_roblox_data(data):
-    with open(JSON_FILE, "w", encoding="utf-8") as f: 
-        json.dump(data, f, indent=4, ensure_ascii=False)
+async def save_roblox_data(data: dict):
+    # เขียนทับให้ตรงกับ dict ที่ส่งมาทั้งหมด (รองรับทั้งกรณีเพิ่ม/แก้ไข/ลบเกม)
+    existing_ids = {doc["_id"] async for doc in roblox_col.find({}, {"_id": 1})}
+    for key, val in data.items():
+        await roblox_col.update_one({"_id": key}, {"$set": val}, upsert=True)
+    for removed_id in existing_ids - set(data.keys()):
+        await roblox_col.delete_one({"_id": removed_id})
 
 # ==========================================
 # 🔓 DYNAMIC GROUP ROLE VIEW (🐈‍⬛ BLACK CAT THEME)
@@ -187,11 +211,48 @@ current_songs = {}
 loop_status = {}   
 
 # ==========================================
-# ⚙️ IN-MEMORY CONFIG (รีเซ็ตเมื่อบอทรีสตาร์ท/deploy ใหม่ — ยังไม่ใช้ฐานข้อมูล)
+# ⚙️ CONFIG HELPERS (เก็บถาวรใน MongoDB Atlas — ไม่หายเมื่อบอทรีสตาร์ท/deploy ใหม่)
 # ==========================================
-WELCOME_CONFIG = {}      # guild_id -> {"channel_id": int, "autorole_id": int}
-STICKY_MESSAGES = {}     # channel_id -> {"content": str, "message_id": int}
-AFK_USERS = {}           # user_id -> reason (str)
+
+async def get_welcome_config(guild_id: int) -> dict:
+    doc = await welcome_col.find_one({"_id": guild_id})
+    return doc.get("config", {}) if doc else {}
+
+async def set_welcome_config_field(guild_id: int, field: str, value):
+    await welcome_col.update_one({"_id": guild_id}, {"$set": {f"config.{field}": value}}, upsert=True)
+
+async def unset_welcome_config_field(guild_id: int, field: str):
+    await welcome_col.update_one({"_id": guild_id}, {"$unset": {f"config.{field}": ""}}, upsert=True)
+
+async def delete_welcome_config(guild_id: int):
+    await welcome_col.delete_one({"_id": guild_id})
+
+
+async def get_sticky(channel_id: int):
+    doc = await sticky_col.find_one({"_id": channel_id})
+    if not doc:
+        return None
+    return {"content": doc["content"], "message_id": doc["message_id"]}
+
+async def set_sticky(channel_id: int, content: str, message_id: int):
+    await sticky_col.update_one({"_id": channel_id}, {"$set": {"content": content, "message_id": message_id}}, upsert=True)
+
+async def delete_sticky(channel_id: int):
+    old = await get_sticky(channel_id)
+    await sticky_col.delete_one({"_id": channel_id})
+    return old
+
+
+async def get_afk(user_id: int):
+    doc = await afk_col.find_one({"_id": user_id})
+    return doc["reason"] if doc else None
+
+async def set_afk(user_id: int, reason: str):
+    await afk_col.update_one({"_id": user_id}, {"$set": {"reason": reason}}, upsert=True)
+
+async def clear_afk(user_id: int):
+    doc = await afk_col.find_one_and_delete({"_id": user_id})
+    return doc["reason"] if doc else None
 
 
 YTDL_OPTIONS = {
@@ -330,7 +391,7 @@ class CategoryItemSelect(discord.ui.Select):
         action = ACTION_REGISTRY.get(self.values[0])
         if not action:
             return
-        embed, view = action["build"](interaction.guild)
+        embed, view = await action["build"](interaction.guild)
         await interaction.message.edit(embed=embed, view=view)
 
 
@@ -357,13 +418,13 @@ class BotControlMenuView(discord.ui.View):
     @discord.ui.button(label="เพลง", style=discord.ButtonStyle.primary, emoji="🎵", row=1)
     async def quick_music_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         await interaction.response.defer()
-        embed, view = ACTION_REGISTRY["setup_music"]["build"](self.guild)
+        embed, view = await ACTION_REGISTRY["setup_music"]["build"](self.guild)
         await interaction.message.edit(embed=embed, view=view)
 
     @discord.ui.button(label="ล้างแชท", style=discord.ButtonStyle.secondary, emoji="🧹", row=1)
     async def quick_clear_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         await interaction.response.defer()
-        embed, view = ACTION_REGISTRY["setup_clear"]["build"](self.guild)
+        embed, view = await ACTION_REGISTRY["setup_clear"]["build"](self.guild)
         await interaction.message.edit(embed=embed, view=view)
 
     @discord.ui.button(label="❌ ปิดแผงควบคุม", style=discord.ButtonStyle.danger, emoji="🔴", row=2)
@@ -377,14 +438,14 @@ class BotControlMenuView(discord.ui.View):
 
 # --- ฟังก์ชันสร้าง embed/view ของแต่ละฟังก์ชันย่อย (dispatch table แทน if/elif ยาว ๆ) ---
 
-def _build_music_view(guild):
+async def _build_music_view(guild):
     return generate_main_menu_embed(guild), MusicControlView(guild)
 
-def _build_soundboard_view(guild):
+async def _build_soundboard_view(guild):
     embed = discord.Embed(title="🔊 ระบบเสียง Soundboard ของน้อง Doro", description="เลือกเสียงที่ต้องการปล่อยในห้องเสียงได้เลยค๊าา! ✨", color=0xF1C40F)
     return embed, SoundboardView(guild)
 
-def _build_clear_view(guild):
+async def _build_clear_view(guild):
     embed = discord.Embed(
         title="🧹 ระบบจัดการและล้างข้อความในช่องแชท",
         description="คุณพี่ต้องการให้น้อน Doro จัดการช่องแชทนี้อย่างไรดีค๊าา?\n\n"
@@ -394,19 +455,20 @@ def _build_clear_view(guild):
     )
     return embed, ClearChannelView(guild)
 
-def _build_roles_view(guild):
+async def _build_roles_view(guild):
     embed = discord.Embed(title="🛡️ ระบบจัดการยศอัตโนมัติค๊าา", description="คุณชอบยศไหนเลือกรับจากเมนูด้านล่างนี้ได้เลยนะค๊าา หรือจะกดปุ่มขอยศพิเศษพร้อมส่งเหตุผลอ้อน ๆ มาให้แอดมินดูก็ได้น้าา~ ✨", color=0xFFB6C1)
     return embed, RequestRoleView(guild)
 
-def _build_poll_view(guild):
+async def _build_poll_view(guild):
     embed = discord.Embed(title="📊 ระบบสร้างคำถามโพลระดมความคิดค๊าา", description="กรุณากรอกหัวข้อคำถาม และเลือกช่องทางปล่อยโพลให้ครบถ้วนด้านล่างนี้เลยน้าา~ ✨", color=0x9B59B6)
     return embed, AskQuestionView(guild)
 
-def _build_roblox_view(guild):
+async def _build_roblox_view(guild):
     embed = discord.Embed(title="🎮 คลังแสง Private Server ของแก๊งเรา! 🚀", description="อยากไปฟาร์ม ไปเวล หรือไปตึงเกมไหน เลือกชื่อเกมจากเมนูด้านล่างนี้ได้เลยค๊าา\n(สำหรับแอดมินสามารถกดปุ่มเพื่อเพิ่มหรือลบเกมได้เลยนะค๊าา) ✨", color=0x00E5FF)
-    return embed, RobloxServerView(guild)
+    roblox_data = await load_roblox_data()
+    return embed, RobloxServerView(guild, roblox_data)
 
-def _build_game_codes_view(guild):
+async def _build_game_codes_view(guild):
     embed = discord.Embed(
         title="🎮 ระบบเช็คโค้ดเกม Roblox",
         description="เลือกเกมจากเมนูด้านล่างเลยค่ะ หนูจะไปหาโค้ดล่าสุดมาให้น้าา~ 🔍",
@@ -414,12 +476,12 @@ def _build_game_codes_view(guild):
     )
     return embed, GameCodeView()
 
-def _build_kick_view(guild):
+async def _build_kick_view(guild):
     embed = discord.Embed(title="🚫 ระบบโหวตเตะสมาชิก (โหมด Doro เอาจริง!)", description="โปรดเลือกรายชื่อคนที่ไม่น่ารักที่คุณต้องการเริ่มโหวตลงมติเตะด้านล่างนี้ได้เลยค่ะงึมมม", color=discord.Color.red())
     return embed, MemberSelectView(guild)
 
-def _build_welcome_view(guild):
-    cfg = WELCOME_CONFIG.get(guild.id, {})
+async def _build_welcome_view(guild):
+    cfg = await get_welcome_config(guild.id)
     channel = guild.get_channel(cfg.get("channel_id")) if cfg.get("channel_id") else None
     role = guild.get_role(cfg.get("autorole_id")) if cfg.get("autorole_id") else None
     embed = discord.Embed(
@@ -428,13 +490,13 @@ def _build_welcome_view(guild):
             f"📢 ห้องส่งข้อความทักทาย/บอกลาตอนนี้: {channel.mention if channel else '*ยังไม่ได้ตั้งค่า*'}\n"
             f"🎭 ยศอัตโนมัติให้สมาชิกใหม่: {role.mention if role else '*ปิดอยู่*'}\n\n"
             "เลือกห้องและยศจากเมนูด้านล่างนี้ได้เลยค่ะ\n"
-            "⚠️ *ค่านี้เก็บไว้ในหน่วยความจำเท่านั้น ถ้าบอทรีสตาร์ทหรือ deploy ใหม่จะต้องมาตั้งค่าใหม่อีกครั้งนะคะ*"
+            "✅ *ค่านี้บันทึกลงฐานข้อมูลถาวรแล้ว ไม่หายแม้บอทจะรีสตาร์ทหรือ deploy ใหม่*"
         ),
         color=0x1ABC9C,
     )
     return embed, WelcomeConfigView(guild)
 
-def _build_afk_view(guild):
+async def _build_afk_view(guild):
     embed = discord.Embed(
         title="😴 ระบบ AFK",
         description=(
@@ -446,7 +508,7 @@ def _build_afk_view(guild):
     )
     return embed, AFKConfigView(guild)
 
-def _build_sticky_view(guild):
+async def _build_sticky_view(guild):
     embed = discord.Embed(
         title="📌 ตั้งค่าข้อความปักหมุด (Sticky Message)",
         description=(
@@ -458,11 +520,11 @@ def _build_sticky_view(guild):
     return embed, StickyConfigView(guild)
 
 
-def _build_analytics_view(guild):
+async def _build_analytics_view(guild):
     embed = discord.Embed(title="📈 ศูนย์บริการข้อมูลสมาชิกเเละสถิติเชิงลึก", description="เลือกดูสถิติภาพรวม ตรวจสอบรายชื่อแอดมิน หรือค้นหาคนไร้ยศในเซิร์ฟเวอร์ได้เลยค๊าา ✨", color=0x2ECC71)
     return embed, MemberAnalyticsView(guild)
 
-def _build_help_view(guild):
+async def _build_help_view(guild):
     embed = discord.Embed(
         title="📘 สมุดคู่มือและบันทึกความสามารถของน้อน Doro 🤖✨",
         description=(
@@ -798,13 +860,13 @@ class AddRobloxServerModal(discord.ui.Modal, title="🎮 กรอกราย�
     async def on_submit(self, interaction: discord.Interaction):
         g_id = self.game_id.value.strip().lower().replace(" ", "_")
         full_display_name = f"{self.selected_emoji} {self.game_name.value.strip()}"
-        current_data = load_roblox_data()
+        current_data = await load_roblox_data()
         current_data[g_id] = {
             "name": full_display_name, 
             "url": self.game_url.value.strip(),
             "image": self.game_image.value.strip() if self.game_image.value else None
         }
-        save_roblox_data(current_data)
+        await save_roblox_data(current_data)
         await interaction.response.send_message(f"✅ บันทึกเกม **{full_display_name}** เรียบร้อยค๊าา!", ephemeral=True)
 
 class RobloxEmojiSelect(discord.ui.Select):
@@ -829,14 +891,14 @@ class RobloxEmojiSelectView(discord.ui.View):
         self.add_item(RobloxEmojiSelect())
 
 class RobloxServerSelect(discord.ui.Select):
-    def __init__(self):
-        current_data = load_roblox_data()
-        options = [discord.SelectOption(label=data["name"][:90], value=key) for key, data in current_data.items()] if current_data else [discord.SelectOption(label="ยังไม่มีเกมในคลัง", value="none")]
+    def __init__(self, roblox_data: dict):
+        options = [discord.SelectOption(label=data["name"][:90], value=key) for key, data in roblox_data.items()] if roblox_data else [discord.SelectOption(label="ยังไม่มีเกมในคลัง", value="none")]
         super().__init__(placeholder="🎮 เลือกเกมที่ต้องการเข้าเล่นได้เลยค๊าา...", options=options)
         
     async def callback(self, interaction: discord.Interaction):
         if self.values[0] == "none": return
-        game_data = load_roblox_data().get(self.values[0])
+        current_data = await load_roblox_data()
+        game_data = current_data.get(self.values[0])
         if game_data:
             embed = discord.Embed(title=f"🚀 เข้าเล่นเกม {game_data['name']}", color=0x00E5FF)
             if game_data.get("image"):
@@ -858,21 +920,21 @@ class DeleteRobloxServerModal(discord.ui.Modal, title="🗑️ ลบลิง�
     async def on_submit(self, interaction: discord.Interaction):
         await interaction.response.defer(ephemeral=True)
         g_id = self.game_id.value.strip().lower().replace(" ", "_")
-        current_data = load_roblox_data()
+        current_data = await load_roblox_data()
 
         if g_id in current_data:
             deleted_name = current_data[g_id]['name']
             del current_data[g_id]
-            save_roblox_data(current_data)
+            await save_roblox_data(current_data)
             await interaction.followup.send(f"🗑️ ลบเกม **{deleted_name}** ออกจากคลังแสงเรียบร้อยค๊าา!", ephemeral=True, delete_after=3)
         else: 
             await interaction.followup.send(f"❌ ไม่พบรหัสเกม '{g_id}' ในระบบค๊าา ลองเช็คตัวพิมพ์ดี ๆ น้าา", ephemeral=True, delete_after=3)
 
 class RobloxServerView(discord.ui.View):
-    def __init__(self, guild):
+    def __init__(self, guild, roblox_data: dict):
         super().__init__(timeout=None)
         self.guild = guild
-        self.add_item(RobloxServerSelect())
+        self.add_item(RobloxServerSelect(roblox_data))
     @discord.ui.button(label="➕ เพิ่มเกม", style=discord.ButtonStyle.primary, emoji="➕", row=1)
     async def add_btn(self, interaction: discord.Interaction, btn): 
         await interaction.response.send_message("🎨 เลือกอิโมจิเพื่อเริ่มตั้งค่าเกมค๊าา:", view=RobloxEmojiSelectView(), ephemeral=True)
@@ -939,7 +1001,7 @@ class WelcomeConfigView(discord.ui.View):
     async def channel_select(self, interaction: discord.Interaction, select: discord.ui.ChannelSelect):
         await interaction.response.defer(ephemeral=True)
         channel = select.values[0]
-        WELCOME_CONFIG.setdefault(self.guild.id, {})["channel_id"] = channel.id
+        await set_welcome_config_field(self.guild.id, "channel_id", channel.id)
         await interaction.followup.send(f"✅ ตั้งห้อง {channel.mention} เป็นห้องต้อนรับ/บอกลาแล้วค่ะ", ephemeral=True)
 
     @discord.ui.select(cls=discord.ui.RoleSelect,
@@ -947,19 +1009,19 @@ class WelcomeConfigView(discord.ui.View):
     async def role_select(self, interaction: discord.Interaction, select: discord.ui.RoleSelect):
         await interaction.response.defer(ephemeral=True)
         role = select.values[0]
-        WELCOME_CONFIG.setdefault(self.guild.id, {})["autorole_id"] = role.id
+        await set_welcome_config_field(self.guild.id, "autorole_id", role.id)
         await interaction.followup.send(f"✅ ตั้งยศอัตโนมัติเป็น **{role.name}** แล้วค่ะ", ephemeral=True)
 
     @discord.ui.button(label="ปิด Auto-role", style=discord.ButtonStyle.secondary, emoji="🚫", row=2)
     async def disable_autorole(self, interaction: discord.Interaction, button: discord.ui.Button):
         await interaction.response.defer(ephemeral=True)
-        WELCOME_CONFIG.get(self.guild.id, {}).pop("autorole_id", None)
+        await unset_welcome_config_field(self.guild.id, "autorole_id")
         await interaction.followup.send("🚫 ปิด Auto-role แล้วค่ะ", ephemeral=True)
 
     @discord.ui.button(label="ปิดระบบทั้งหมด", style=discord.ButtonStyle.danger, emoji="❌", row=2)
     async def disable_all(self, interaction: discord.Interaction, button: discord.ui.Button):
         await interaction.response.defer(ephemeral=True)
-        WELCOME_CONFIG.pop(self.guild.id, None)
+        await delete_welcome_config(self.guild.id)
         await interaction.followup.send("❌ ปิดระบบต้อนรับ/บอกลา/Auto-role ทั้งหมดแล้วค่ะ", ephemeral=True)
 
     @discord.ui.button(label="🔙 ย้อนกลับหน้าแรก", style=discord.ButtonStyle.secondary, emoji="⬅️", row=3)
@@ -979,7 +1041,7 @@ class AFKReasonModal(discord.ui.Modal, title="😴 ตั้งสถานะ A
 
     async def on_submit(self, interaction: discord.Interaction):
         reason = self.reason_input.value.strip() or "ไปทำธุระก่อนน้าา"
-        AFK_USERS[interaction.user.id] = reason
+        await set_afk(interaction.user.id, reason)
         await interaction.response.send_message(f"💤 ตั้งสถานะ AFK ให้คุณแล้วค่ะ: _{reason}_", ephemeral=True)
 
 
@@ -994,7 +1056,7 @@ class AFKConfigView(discord.ui.View):
 
     @discord.ui.button(label="ปลด AFK ของฉัน", style=discord.ButtonStyle.secondary, emoji="👋", row=0)
     async def clear_afk(self, interaction: discord.Interaction, button: discord.ui.Button):
-        if AFK_USERS.pop(interaction.user.id, None) is not None:
+        if await clear_afk(interaction.user.id) is not None:
             await interaction.response.send_message("👋 ปลดสถานะ AFK ให้แล้วค่ะ ยินดีต้อนรับกลับมาน้าา~", ephemeral=True)
         else:
             await interaction.response.send_message("ตอนนี้คุณไม่ได้ตั้ง AFK อยู่นะคะ", ephemeral=True)
@@ -1017,7 +1079,7 @@ class StickyMessageModal(discord.ui.Modal, title="📌 ตั้งข้อค�
     async def on_submit(self, interaction: discord.Interaction):
         await interaction.response.defer(ephemeral=True)
         content = self.content_input.value.strip()
-        old = STICKY_MESSAGES.pop(self.channel.id, None)
+        old = await delete_sticky(self.channel.id)
         if old:
             try:
                 old_msg = await self.channel.fetch_message(old["message_id"])
@@ -1028,7 +1090,7 @@ class StickyMessageModal(discord.ui.Modal, title="📌 ตั้งข้อค�
             sent = await self.channel.send(f"📌 **ข้อความปักหมุด:**\n{content}")
         except Exception as e:
             return await interaction.followup.send(f"❌ ส่งข้อความไม่สำเร็จ: {type(e).__name__}", ephemeral=True)
-        STICKY_MESSAGES[self.channel.id] = {"content": content, "message_id": sent.id}
+        await set_sticky(self.channel.id, content, sent.id)
         await interaction.followup.send(f"✅ ตั้งข้อความปักหมุดในห้อง {self.channel.mention} เรียบร้อยค่ะ", ephemeral=True)
 
 
@@ -1062,7 +1124,7 @@ class StickyConfigView(discord.ui.View):
         if not self.selected_channel:
             return await interaction.response.send_message("❌ กรุณาเลือกห้องจากเมนูด้านบนก่อนค่ะ", ephemeral=True)
         await interaction.response.defer(ephemeral=True)
-        old = STICKY_MESSAGES.pop(self.selected_channel.id, None)
+        old = await delete_sticky(self.selected_channel.id)
         if old:
             try:
                 old_msg = await self.selected_channel.fetch_message(old["message_id"])
@@ -1371,48 +1433,33 @@ CODE_FETCH_HEADERS = {
     "Accept-Language": "en-US,en;q=0.9,th;q=0.8",
 }
 
-MANUAL_CODES_FILE = "manual_codes.json"
 
 
-def load_manual_codes() -> dict:
-    try:
-        with open(MANUAL_CODES_FILE, "r", encoding="utf-8") as f:
-            return json.load(f)
-    except FileNotFoundError:
-        return {}
-
-
-def save_manual_codes(data: dict):
-    with open(MANUAL_CODES_FILE, "w", encoding="utf-8") as f:
-        json.dump(data, f, indent=4, ensure_ascii=False)
-
-
-def get_manual_codes(game_key: str) -> list[tuple[str, str]]:
-    data = load_manual_codes()
-    entries = data.get(game_key, [])
+async def get_manual_codes(game_key: str) -> list[tuple[str, str]]:
+    doc = await manual_codes_col.find_one({"_id": game_key})
+    entries = doc.get("entries", []) if doc else []
     return [(e.get("code", ""), e.get("desc", "")) for e in entries if e.get("code")]
 
 
-def add_manual_code(game_key: str, code: str, desc: str):
-    data = load_manual_codes()
-    entries = data.setdefault(game_key, [])
+async def add_manual_code(game_key: str, code: str, desc: str):
+    doc = await manual_codes_col.find_one({"_id": game_key})
+    entries = doc.get("entries", []) if doc else []
     for e in entries:
         if e.get("code", "").lower() == code.lower():
             e["desc"] = desc
-            save_manual_codes(data)
+            await manual_codes_col.update_one({"_id": game_key}, {"$set": {"entries": entries}}, upsert=True)
             return
     entries.append({"code": code, "desc": desc})
-    save_manual_codes(data)
+    await manual_codes_col.update_one({"_id": game_key}, {"$set": {"entries": entries}}, upsert=True)
 
 
-def remove_manual_code(game_key: str, code: str) -> bool:
-    data = load_manual_codes()
-    entries = data.get(game_key, [])
+async def remove_manual_code(game_key: str, code: str) -> bool:
+    doc = await manual_codes_col.find_one({"_id": game_key})
+    entries = doc.get("entries", []) if doc else []
     new_entries = [e for e in entries if e.get("code", "").lower() != code.lower()]
     if len(new_entries) == len(entries):
         return False
-    data[game_key] = new_entries
-    save_manual_codes(data)
+    await manual_codes_col.update_one({"_id": game_key}, {"$set": {"entries": new_entries}}, upsert=True)
     return True
 
 
@@ -1501,7 +1548,7 @@ class GameCodeSelect(discord.ui.Select):
             error_detail = f"{type(e).__name__}: {e}"
             logger.warning(f"fetch_game_codes failed for {game_key}: {error_detail}")
             print(f"[CODE FETCH ERROR] {game_key}: {error_detail}", flush=True)
-            codes = get_manual_codes(game_key)
+            codes = await get_manual_codes(game_key)
             from_manual = True
 
         embed = build_codes_embed(info["label"], info["url"], codes, from_manual=from_manual)
@@ -1598,7 +1645,7 @@ class AddCodeModal(discord.ui.Modal):
             code, desc = code.strip(), desc.strip()
             if not code:
                 continue
-            add_manual_code(self.game_key, code, desc)
+            await add_manual_code(self.game_key, code, desc)
             added.append(code)
 
         if not added:
@@ -1642,7 +1689,7 @@ class RemoveCodeGameSelect(discord.ui.Select):
     async def callback(self, interaction: discord.Interaction):
         game_key = self.values[0]
         info = GAME_CODE_SOURCES[game_key]
-        entries = get_manual_codes(game_key)
+        entries = await get_manual_codes(game_key)
         if not entries:
             return await interaction.response.send_message(
                 f"📭 เกม **{info['label']}** ยังไม่มีโค้ดสำรองเก็บไว้เลยค่ะ", ephemeral=True
@@ -1661,7 +1708,7 @@ class RemoveCodePicker(discord.ui.Select):
 
     async def callback(self, interaction: discord.Interaction):
         code = self.values[0]
-        remove_manual_code(self.game_key, code)
+        await remove_manual_code(self.game_key, code)
         await interaction.response.edit_message(content=f"🗑️ ลบโค้ด `{code}` แล้วค่ะ", view=None)
 
 
@@ -1711,7 +1758,7 @@ async def slash_menu(interaction: discord.Interaction):
 
 @bot.event
 async def on_member_join(member: discord.Member):
-    cfg = WELCOME_CONFIG.get(member.guild.id)
+    cfg = await get_welcome_config(member.guild.id)
     if not cfg:
         return
     channel = member.guild.get_channel(cfg.get("channel_id")) if cfg.get("channel_id") else None
@@ -1738,7 +1785,7 @@ async def on_member_join(member: discord.Member):
 
 @bot.event
 async def on_member_remove(member: discord.Member):
-    cfg = WELCOME_CONFIG.get(member.guild.id)
+    cfg = await get_welcome_config(member.guild.id)
     if not cfg:
         return
     channel = member.guild.get_channel(cfg.get("channel_id")) if cfg.get("channel_id") else None
@@ -1763,17 +1810,22 @@ async def on_message(message: discord.Message):
     # --- 💤 ระบบ AFK ---
     if lower_msg == "doro afk" or lower_msg.startswith("doro afk "):
         reason = msg[len("doro afk"):].strip() or "ไปทำธุระก่อนน้าา"
-        AFK_USERS[message.author.id] = reason
+        await set_afk(message.author.id, reason)
         await message.channel.send(f"💤 ตั้งสถานะ AFK ให้ **{message.author.display_name}** แล้วค่ะ: _{reason}_", delete_after=8)
         return
-    if message.author.id in AFK_USERS:
-        del AFK_USERS[message.author.id]
+    if await get_afk(message.author.id) is not None:
+        await clear_afk(message.author.id)
         await message.channel.send(f"👋 ยินดีต้อนรับกลับมาค่ะ **{message.author.display_name}** ปลด AFK ให้แล้วน้าา~", delete_after=5)
     if message.mentions:
-        afk_mentions = [m for m in message.mentions if m.id in AFK_USERS and m.id != message.author.id]
-        if afk_mentions:
-            lines = [f"💤 **{m.display_name}** กำลัง AFK อยู่ค่ะ: _{AFK_USERS[m.id]}_" for m in afk_mentions]
-            await message.channel.send("\n".join(lines), delete_after=8)
+        afk_lines = []
+        for m in message.mentions:
+            if m.id == message.author.id:
+                continue
+            reason = await get_afk(m.id)
+            if reason is not None:
+                afk_lines.append(f"💤 **{m.display_name}** กำลัง AFK อยู่ค่ะ: _{reason}_")
+        if afk_lines:
+            await message.channel.send("\n".join(afk_lines), delete_after=8)
 
     # --- 📌 ระบบ Sticky Message (ตั้งค่า/ปิด) ---
     if lower_msg.startswith("doro sticky "):
@@ -1781,7 +1833,7 @@ async def on_message(message: discord.Message):
             return await message.channel.send("❌ ต้องมีสิทธิ์ Manage Messages ถึงจะตั้ง sticky ได้ค่ะ")
         content = msg[len("doro sticky "):].strip()
         if content.lower() in ("off", "ปิด"):
-            old = STICKY_MESSAGES.pop(message.channel.id, None)
+            old = await delete_sticky(message.channel.id)
             if old:
                 try:
                     old_msg = await message.channel.fetch_message(old["message_id"])
@@ -1790,7 +1842,7 @@ async def on_message(message: discord.Message):
                     pass
             return await message.channel.send("📌 ปิดข้อความปักหมุดของห้องนี้แล้วค่ะ", delete_after=5)
         sent = await message.channel.send(f"📌 **ข้อความปักหมุด:**\n{content}")
-        STICKY_MESSAGES[message.channel.id] = {"content": content, "message_id": sent.id}
+        await set_sticky(message.channel.id, content, sent.id)
         return
 
     if lower_msg in custom_responses:
@@ -1835,7 +1887,7 @@ async def on_message(message: discord.Message):
         if game_key not in GAME_CODE_SOURCES:
             game_list = ", ".join(f"`{k}`" for k in GAME_CODE_SOURCES)
             return await message.channel.send(f"❌ ไม่รู้จักเกม `{game_key}` ค่ะ ใช้ได้แค่: {game_list}")
-        add_manual_code(game_key, code, desc)
+        await add_manual_code(game_key, code, desc)
         await message.channel.send(f"✅ เพิ่มโค้ด `{code}` ให้เกม `{game_key}` เรียบร้อยค๊าา (ใช้เป็นสำรองตอนดึงเว็บไม่ได้)")
         return
 
@@ -1847,7 +1899,7 @@ async def on_message(message: discord.Message):
         if len(args) < 2:
             return await message.channel.send("❌ รูปแบบ: `doro ลบโค้ด <game_key> <โค้ด>` หรือพิมพ์ `doro โค้ด` แล้วกดปุ่ม 🗑️ ลบโค้ด แทนก็ได้ค่ะ")
         game_key, code = args[0], args[1]
-        if remove_manual_code(game_key, code):
+        if await remove_manual_code(game_key, code):
             await message.channel.send(f"🗑️ ลบโค้ด `{code}` ออกจากเกม `{game_key}` แล้วค่ะ")
         else:
             await message.channel.send(f"❌ หาโค้ด `{code}` ในเกม `{game_key}` ไม่เจอค่ะ")
@@ -1915,7 +1967,7 @@ async def on_message(message: discord.Message):
         return
 
     # --- 📌 บั๊มปักหมุดข้อความ sticky ให้ลอยอยู่ล่างสุดของห้องเสมอ ---
-    sticky = STICKY_MESSAGES.get(message.channel.id)
+    sticky = await get_sticky(message.channel.id)
     if sticky:
         try:
             old_msg = await message.channel.fetch_message(sticky["message_id"])
@@ -1924,7 +1976,7 @@ async def on_message(message: discord.Message):
             pass
         try:
             new_msg = await message.channel.send(f"📌 **ข้อความปักหมุด:**\n{sticky['content']}")
-            STICKY_MESSAGES[message.channel.id]["message_id"] = new_msg.id
+            await set_sticky(message.channel.id, sticky["content"], new_msg.id)
         except Exception as e:
             logger.warning(f"sticky repost failed: {type(e).__name__}: {e}")
 
