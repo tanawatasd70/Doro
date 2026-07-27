@@ -58,6 +58,11 @@ if not MONGO_URI:
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("doro")
 
+if CURL_CFFI_AVAILABLE:
+    logger.info("curl_cffi พร้อมใช้งาน — ใช้เป็นวิธีดึงโค้ดหลัก (fallback: aiohttp -> manual)")
+else:
+    logger.warning("curl_cffi ยังไม่ถูกติดตั้ง (import ล้มเหลว) — จะดึงโค้ดด้วย aiohttp เท่านั้น ตรวจสอบ requirements.txt")
+
 # ==========================================
 # 🍃 MONGODB ATLAS CONNECTION
 # ==========================================
@@ -2093,7 +2098,7 @@ def build_codes_embed(game_label: str, source_url: str, codes: list[tuple[str, s
         color=0x77DD77,
     )
     footer = f"ทั้งหมด {len(codes)} โค้ด"
-    footer += " • มาจากรายการที่แอดมินอัปเดตไว้ (ดึงจากเว็บไม่ได้ตอนนี้)" if from_manual else " • อัปเดตล่าสุดจาก progameguides.com"
+    footer += " • มาจากรายการที่แอดมินอัปเดตไว้ค่ะ" if from_manual else " • อัปเดตล่าสุดจาก progameguides.com"
     embed.set_footer(text=footer)
     return embed
 
@@ -2111,18 +2116,9 @@ class GameCodeSelect(discord.ui.Select):
         game_key = self.values[0]
         info = GAME_CODE_SOURCES[game_key]
 
-        codes: list[tuple[str, str]] = []
-        from_manual = False
-        try:
-            codes = await fetch_game_codes(info["url"])
-            if not codes:
-                raise ValueError("no codes parsed from page")
-        except Exception as e:
-            error_detail = f"{type(e).__name__}: {e}"
-            logger.warning(f"fetch_game_codes failed for {game_key}: {error_detail}")
-            print(f"[CODE FETCH ERROR] {game_key}: {error_detail}", flush=True)
-            codes = await get_manual_codes(game_key)
-            from_manual = True
+        # ปิดการดึงโค้ดจากเว็บสดไว้ก่อน (progameguides.com บล็อก IP ของ Render) ใช้โค้ดมือเป็นหลักแทน
+        codes = await get_manual_codes(game_key)
+        from_manual = True
 
         embed = build_codes_embed(info["label"], info["url"], codes, from_manual=from_manual)
         new_view = GameCodeResultView(codes[:20])
@@ -2379,8 +2375,10 @@ async def on_ready():
     bot.add_view(DynamicGroupJoinView(role_id=0, emoji_str="🌸"))
     if not check_reminders.is_running():
         check_reminders.start()
-    if not check_new_game_codes.is_running():
-        check_new_game_codes.start()
+    # ปิดระบบเช็คโค้ดใหม่อัตโนมัติจากเว็บไว้ก่อน (progameguides.com บล็อก IP ของ Render อยู่)
+    # ใช้ระบบโค้ดมือ (doro เพิ่มโค้ด / doro ลบโค้ด) เป็นหลักแทน
+    # if not check_new_game_codes.is_running():
+    #     check_new_game_codes.start()
     try:
         synced = await bot.tree.sync()
         logger.info(f"Synced {len(synced)} slash command(s)")
