@@ -37,3 +37,4 @@ colorama==0.4.6
 tqdm==4.67.1
 typing_extensions==4.14.1
 annotated-types==0.7.0
+curl_cffi>=0.7.0
