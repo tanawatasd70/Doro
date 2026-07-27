@@ -67,6 +67,8 @@ afk_col = db["afk_users"]                # _id: user_id -> {reason}
 custom_responses_col = db["custom_responses"]  # _id: guild_id -> {responses: {trigger: reply}}
 reminders_col = db["reminders"]          # _id: auto -> {user_id, channel_id, guild_id, remind_at, message}
 warnings_col = db["warnings"]            # _id: auto -> {guild_id, user_id, reason, moderator_id, timestamp}
+code_announce_col = db["code_announce"]  # _id: guild_id -> {channels: {game_key: channel_id}}
+known_codes_col = db["known_codes"]      # _id: game_key -> {codes: [code, ...]}  (global baseline สำหรับตรวจจับโค้ดใหม่)
 
 intents = discord.Intents.default()
 intents.message_content = True
@@ -389,6 +391,60 @@ async def check_reminders():
 
 @check_reminders.before_loop
 async def before_check_reminders():
+    await bot.wait_until_ready()
+
+
+# ==========================================
+# 🎁 NEW GAME CODE WATCHER (auto-announce) TASK LOOP
+# ==========================================
+@tasks.loop(minutes=30)
+async def check_new_game_codes():
+    for game_key, info in GAME_CODE_SOURCES.items():
+        try:
+            codes = await fetch_game_codes(info["url"])
+        except Exception as e:
+            logger.warning(f"code-watch fetch failed for {game_key}: {type(e).__name__}: {e}")
+            continue
+        if not codes:
+            continue
+
+        current_set = {c for c, _ in codes}
+        known = await get_known_codes(game_key)
+        await save_known_codes(game_key, list(current_set))
+
+        if known is None:
+            # รอบแรกที่เห็นเกมนี้ — เก็บ baseline ไว้ก่อน ยังไม่ประกาศ (กันสแปมโค้ดเก่าทั้งหมดตอนเปิดใช้ระบบครั้งแรก)
+            continue
+
+        new_codes = [(c, d) for c, d in codes if c not in known]
+        if not new_codes:
+            continue
+
+        configs = await get_all_announce_configs(game_key)
+        if not configs:
+            continue
+
+        lines = [f"`{c}`" + (f" — {d}" if d else "") for c, d in new_codes[:10]]
+        embed = discord.Embed(
+            title=f"🎉 เจอโค้ดใหม่แล้วค่าา! — {info['label']}",
+            description="\n".join(lines),
+            color=0x77DD77,
+        )
+        embed.set_footer(text="ประกาศอัตโนมัติจากน้อง Doro 🤖 • ที่มา progameguides.com")
+
+        for cfg in configs:
+            channel_id = cfg.get("channels", {}).get(game_key)
+            channel = bot.get_channel(channel_id) if channel_id else None
+            if channel:
+                try:
+                    await channel.send(embed=embed)
+                except Exception as e:
+                    logger.warning(f"code announce send failed (guild {cfg.get('_id')}): {type(e).__name__}: {e}")
+
+        await asyncio.sleep(2)  # เว้นจังหวะระหว่างเกมนิดนึง กันยิงเว็บถี่เกินไป
+
+@check_new_game_codes.before_loop
+async def before_check_new_game_codes():
     await bot.wait_until_ready()
 # ==========================================
 # 🔍 MUSIC SEARCH MODAL
@@ -1908,6 +1964,33 @@ async def remove_manual_code(game_key: str, code: str) -> bool:
     return True
 
 
+# --- 📢 การประกาศโค้ดใหม่อัตโนมัติ (ตั้งค่าห้องแยกต่อเกม/ต่อเซิร์ฟ) ---
+async def get_announce_channel(guild_id: int, game_key: str):
+    doc = await code_announce_col.find_one({"_id": guild_id})
+    return doc.get("channels", {}).get(game_key) if doc else None
+
+async def set_announce_channel(guild_id: int, game_key: str, channel_id: int):
+    await code_announce_col.update_one({"_id": guild_id}, {"$set": {f"channels.{game_key}": channel_id}}, upsert=True)
+
+async def unset_announce_channel(guild_id: int, game_key: str):
+    await code_announce_col.update_one({"_id": guild_id}, {"$unset": {f"channels.{game_key}": ""}}, upsert=True)
+
+async def get_all_announce_configs(game_key: str) -> list:
+    return [doc async for doc in code_announce_col.find({f"channels.{game_key}": {"$exists": True}})]
+
+
+# --- 🆕 ตัวติดตามโค้ดที่เคยเห็นแล้ว (baseline ระดับเกม ใช้ร่วมกันทุกเซิร์ฟ) ---
+async def get_known_codes(game_key: str):
+    """คืนค่า set ของโค้ดที่เคยเห็นแล้ว หรือ None ถ้ายังไม่เคยเก็บ baseline มาก่อนเลย"""
+    doc = await known_codes_col.find_one({"_id": game_key})
+    if not doc:
+        return None
+    return set(doc.get("codes", []))
+
+async def save_known_codes(game_key: str, codes: list):
+    await known_codes_col.update_one({"_id": game_key}, {"$set": {"codes": codes}}, upsert=True)
+
+
 def parse_codes_from_html(html: str) -> list[tuple[str, str]]:
     """แกะรายชื่อโค้ด + คำอธิบาย ออกจากตาราง 'Active Codes' ในหน้าเว็บ"""
     soup = BeautifulSoup(html, "html.parser")
@@ -1976,7 +2059,7 @@ class GameCodeSelect(discord.ui.Select):
             discord.SelectOption(label=info["label"], value=key)
             for key, info in GAME_CODE_SOURCES.items()
         ]
-        super().__init__(placeholder="🎮 เลือกเกมที่ต้องการดูโค้ด...", options=options)
+        super().__init__(placeholder="🎮 เลือกเกมที่ต้องการดูโค้ด...", options=options, row=0)
 
     async def callback(self, interaction: discord.Interaction):
         await interaction.response.defer()
@@ -2011,21 +2094,14 @@ class GameCodeSelect(discord.ui.Select):
                 pass
 
 
-class CopyCodeSelect(discord.ui.Select):
-    def __init__(self, codes: list[tuple[str, str]]):
-        options = [
-            discord.SelectOption(
-                label=f"📋 คัดลอก: {code}"[:100],
-                value=code[:100],
-                description=(desc[:100] or None),
-            )
-            for code, desc in codes[:25]
-        ]
-        super().__init__(placeholder="📋 เลือกโค้ดที่จะคัดลอก...", options=options, row=1)
+class CodeCopyButton(discord.ui.Button):
+    """ปุ่มคัดลอกโค้ด กดแล้วบอทจะส่งโค้ดนั้นมาเป็นข้อความ ephemeral ให้กดคัดลอกได้ทันที"""
+    def __init__(self, code: str, row: int):
+        super().__init__(label=f"📋 {code}"[:80], style=discord.ButtonStyle.secondary, row=row)
+        self.code = code
 
     async def callback(self, interaction: discord.Interaction):
-        code = self.values[0]
-        await interaction.response.send_message(f"`{code}`", ephemeral=True)
+        await interaction.response.send_message(f"📋 คัดลอกโค้ดนี้ได้เลยค่ะ:\n`{self.code}`", ephemeral=True)
 
 
 class GameCodeView(discord.ui.View):
@@ -2033,7 +2109,7 @@ class GameCodeView(discord.ui.View):
         super().__init__(timeout=None)
         self.add_item(GameCodeSelect())
 
-    @discord.ui.button(label="เพิ่มโค้ด", style=discord.ButtonStyle.success, emoji="➕", row=2)
+    @discord.ui.button(label="เพิ่มโค้ด", style=discord.ButtonStyle.success, emoji="➕", row=3)
     async def add_code_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
         if not interaction.user.guild_permissions.manage_guild:
             return await interaction.response.send_message("❌ ต้องมีสิทธิ์ Manage Server ถึงจะเพิ่มโค้ดได้ค่ะ", ephemeral=True)
@@ -2041,7 +2117,7 @@ class GameCodeView(discord.ui.View):
             "เลือกเกมที่จะเพิ่มโค้ดให้ค่ะ:", view=AddCodeAdminView(), ephemeral=True
         )
 
-    @discord.ui.button(label="ลบโค้ด", style=discord.ButtonStyle.danger, emoji="🗑️", row=2)
+    @discord.ui.button(label="ลบโค้ด", style=discord.ButtonStyle.danger, emoji="🗑️", row=3)
     async def remove_code_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
         if not interaction.user.guild_permissions.manage_guild:
             return await interaction.response.send_message("❌ ต้องมีสิทธิ์ Manage Server ถึงจะลบโค้ดได้ค่ะ", ephemeral=True)
@@ -2049,13 +2125,23 @@ class GameCodeView(discord.ui.View):
             "เลือกเกมที่จะลบโค้ดออกค่ะ:", view=RemoveCodeAdminView(), ephemeral=True
         )
 
+    @discord.ui.button(label="ตั้งห้องประกาศโค้ดใหม่", style=discord.ButtonStyle.primary, emoji="📢", row=3)
+    async def announce_setup_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if not interaction.user.guild_permissions.manage_guild:
+            return await interaction.response.send_message("❌ ต้องมีสิทธิ์ Manage Server ถึงจะตั้งค่านี้ได้ค่ะ", ephemeral=True)
+        await interaction.response.send_message(
+            "ตั้งค่าห้องประกาศเมื่อมีโค้ดใหม่ออกได้ที่นี่ค่ะ:", view=CodeAnnounceConfigView(interaction.guild), ephemeral=True
+        )
+
 
 class GameCodeResultView(GameCodeView):
-    """เหมือน GameCodeView แต่เพิ่ม dropdown คัดลอกโค้ด เมื่อมีโค้ดให้เลือกแล้ว"""
+    """เหมือน GameCodeView แต่เพิ่มปุ่มคัดลอกโค้ดแยกทีละปุ่ม เมื่อมีโค้ดให้เลือกแล้ว"""
     def __init__(self, codes: list[tuple[str, str]]):
         super().__init__()
-        if codes:
-            self.add_item(CopyCodeSelect(codes))
+        # แสดงปุ่มคัดลอกได้สูงสุด 10 โค้ด (แถวละ 5 ปุ่ม x 2 แถว) ที่เหลือยังดูได้จากข้อความ embed ด้านบน
+        for idx, (code, _desc) in enumerate(codes[:10]):
+            row = 1 + (idx // 5)  # แถว 1 และ 2
+            self.add_item(CodeCopyButton(code, row))
 
 
 # ------------------------------------------
@@ -2169,6 +2255,67 @@ class RemoveCodeAdminView(discord.ui.View):
         self.add_item(RemoveCodeGameSelect())
 
 
+# ------------------------------------------
+# 📢 ADMIN UI: ตั้งค่าห้องประกาศโค้ดใหม่อัตโนมัติ (แยกห้องต่อเกม/ต่อเซิร์ฟ)
+# ------------------------------------------
+class CodeAnnounceGameSelect(discord.ui.Select):
+    def __init__(self):
+        options = [
+            discord.SelectOption(label=info["label"], value=key)
+            for key, info in GAME_CODE_SOURCES.items()
+        ]
+        super().__init__(placeholder="🎮 1. เลือกเกมที่จะตั้งห้องประกาศ...", options=options, row=0)
+
+    async def callback(self, interaction: discord.Interaction):
+        view: CodeAnnounceConfigView = self.view
+        view.selected_game = self.values[0]
+        info = GAME_CODE_SOURCES[self.values[0]]
+        cur_channel_id = await get_announce_channel(interaction.guild.id, self.values[0])
+        channel = interaction.guild.get_channel(cur_channel_id) if cur_channel_id else None
+        await interaction.response.send_message(
+            f"เลือกเกม **{info['label']}** แล้วค่ะ (ห้องที่ตั้งไว้ตอนนี้: {channel.mention if channel else '*ยังไม่ได้ตั้ง*'})\n"
+            "เลือกห้องใหม่จากเมนูด้านล่าง หรือกดปิดประกาศได้เลยค่ะ",
+            ephemeral=True,
+        )
+
+
+class CodeAnnounceChannelSelect(discord.ui.ChannelSelect):
+    def __init__(self):
+        super().__init__(placeholder="📢 2. เลือกห้องที่จะประกาศโค้ดใหม่...", channel_types=[discord.ChannelType.text], row=1)
+
+    async def callback(self, interaction: discord.Interaction):
+        if not interaction.user.guild_permissions.manage_guild:
+            return await interaction.response.send_message("❌ ต้องมีสิทธิ์ Manage Server ถึงจะตั้งค่านี้ได้ค่ะ", ephemeral=True)
+        view: CodeAnnounceConfigView = self.view
+        if not view.selected_game:
+            return await interaction.response.send_message("❌ กรุณาเลือกเกมจากเมนูด้านบนก่อนค่ะ", ephemeral=True)
+        channel = self.values[0]
+        await set_announce_channel(interaction.guild.id, view.selected_game, channel.id)
+        info = GAME_CODE_SOURCES[view.selected_game]
+        await interaction.response.send_message(
+            f"✅ ตั้งห้องประกาศโค้ดใหม่ของ **{info['label']}** เป็น {channel.mention} แล้วค่ะ พอมีโค้ดใหม่ออกหนูจะรีบมาบอกทันทีน้าา~", ephemeral=True,
+        )
+
+
+class CodeAnnounceConfigView(discord.ui.View):
+    def __init__(self, guild):
+        super().__init__(timeout=120)
+        self.guild = guild
+        self.selected_game = None
+        self.add_item(CodeAnnounceGameSelect())
+        self.add_item(CodeAnnounceChannelSelect())
+
+    @discord.ui.button(label="ปิดประกาศของเกมที่เลือก", style=discord.ButtonStyle.danger, emoji="🚫", row=2)
+    async def disable_announce(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if not interaction.user.guild_permissions.manage_guild:
+            return await interaction.response.send_message("❌ ต้องมีสิทธิ์ Manage Server ถึงจะตั้งค่านี้ได้ค่ะ", ephemeral=True)
+        if not self.selected_game:
+            return await interaction.response.send_message("❌ กรุณาเลือกเกมจากเมนูด้านบนก่อนค่ะ", ephemeral=True)
+        await unset_announce_channel(self.guild.id, self.selected_game)
+        info = GAME_CODE_SOURCES[self.selected_game]
+        await interaction.response.send_message(f"🚫 ปิดประกาศโค้ดใหม่อัตโนมัติของ **{info['label']}** แล้วค่ะ", ephemeral=True)
+
+
 # ==========================================
 # ⚙️ CORE EVENTS & COMMANDS MAIN LOGIC
 # ==========================================
@@ -2187,6 +2334,8 @@ async def on_ready():
     bot.add_view(DynamicGroupJoinView(role_id=0, emoji_str="🌸"))
     if not check_reminders.is_running():
         check_reminders.start()
+    if not check_new_game_codes.is_running():
+        check_new_game_codes.start()
     try:
         synced = await bot.tree.sync()
         logger.info(f"Synced {len(synced)} slash command(s)")
