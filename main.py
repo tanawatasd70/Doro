@@ -8,6 +8,11 @@ import logging
 import discord
 import yt_dlp
 import aiohttp
+try:
+    from curl_cffi.requests import AsyncSession as CurlAsyncSession
+    CURL_CFFI_AVAILABLE = True
+except ImportError:
+    CURL_CFFI_AVAILABLE = False
 import motor.motor_asyncio
 from bson import ObjectId
 from bs4 import BeautifulSoup
@@ -2025,8 +2030,30 @@ def parse_codes_from_html(html: str) -> list[tuple[str, str]]:
     return codes
 
 
+async def fetch_with_curl_cffi(url: str) -> str:
+    """ดึง HTML ด้วย curl_cffi โดย impersonate เบราว์เซอร์จริง (Chrome 124) เพื่อลดโอกาสโดนแอนตี้บอทบล็อก"""
+    async with CurlAsyncSession(impersonate="chrome124", headers=CODE_FETCH_HEADERS, timeout=15) as session:
+        resp = await session.get(url)
+        resp.raise_for_status()
+        return resp.text
+
+
 async def fetch_game_codes(url: str, retries: int = 2) -> list[tuple[str, str]]:
-    last_error = None
+    # 1) ลองใช้ curl_cffi ก่อนเป็นหลัก (impersonate เบราว์เซอร์จริง ลดโอกาสโดนบล็อกกว่า aiohttp เพลนๆ)
+    if CURL_CFFI_AVAILABLE:
+        try:
+            html = await fetch_with_curl_cffi(url)
+            codes = parse_codes_from_html(html)
+            if codes:
+                return codes
+            last_error = ValueError("curl_cffi: no codes parsed from page")
+        except Exception as e:
+            last_error = e
+            logger.warning(f"curl_cffi fetch failed for {url}, falling back to aiohttp: {type(e).__name__}: {e}")
+    else:
+        last_error = None
+
+    # 2) fallback: aiohttp พร้อม retry (ของเดิม) — ใช้ตอน curl_cffi ไม่ได้ติดตั้ง หรือดึงไม่สำเร็จ
     for attempt in range(retries + 1):
         try:
             async with aiohttp.ClientSession(headers=CODE_FETCH_HEADERS) as session:
