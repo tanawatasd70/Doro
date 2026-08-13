@@ -2126,7 +2126,12 @@ class GameCodeSelect(discord.ui.Select):
             discord.SelectOption(label=info["label"], value=key)
             for key, info in GAME_CODE_SOURCES.items()
         ]
-        super().__init__(placeholder="🎮 เลือกเกมที่ต้องการดูโค้ด...", options=options, row=0)
+        super().__init__(
+            placeholder="🎮 เลือกเกมที่ต้องการดูโค้ด...",
+            options=options,
+            row=0,
+            custom_id="game_code_select",
+        )
 
     async def callback(self, interaction: discord.Interaction):
         await interaction.response.defer()
@@ -2152,14 +2157,33 @@ class GameCodeSelect(discord.ui.Select):
                 pass
 
 
+def _code_copy_custom_id(code: str) -> str:
+    # custom_id จำกัดที่ 100 ตัวอักษรของ Discord ตัดให้พอดี กันโค้ดยาวเกิน
+    return f"codecopy:{code}"[:100]
+
+
+async def _send_code_copy_message(interaction: discord.Interaction, code: str):
+    await interaction.response.send_message(
+        f"📋 กดไอคอนคัดลอกที่มุมกล่องด้านล่างได้เลยค่ะ (มือถือกดค้างที่โค้ด):\n```\n{code}\n```",
+        ephemeral=True,
+    )
+
+
 class CodeCopyButton(discord.ui.Button):
-    """ปุ่มคัดลอกโค้ด กดแล้วบอทจะส่งโค้ดนั้นมาเป็นข้อความ ephemeral ให้กดคัดลอกได้ทันที"""
+    """ปุ่มคัดลอกโค้ด กดแล้วบอทจะส่งโค้ดนั้นมาเป็นข้อความ ephemeral ให้กดคัดลอกได้ทันที
+    custom_id เข้ารหัสตัวโค้ดไว้ตรง ๆ (codecopy:<code>) เพื่อให้ on_interaction ด้านล่าง
+    ยังจับ event นี้ได้แม้บอทจะรีสตาร์ทไปแล้วและ view เดิมหายจากหน่วยความจำ"""
     def __init__(self, code: str, row: int):
-        super().__init__(label=f"📋 คัดลอก: {code}"[:80], style=discord.ButtonStyle.secondary, row=row)
+        super().__init__(
+            label=f"📋 คัดลอก: {code}"[:80],
+            style=discord.ButtonStyle.secondary,
+            row=row,
+            custom_id=_code_copy_custom_id(code),
+        )
         self.code = code
 
     async def callback(self, interaction: discord.Interaction):
-        await interaction.response.send_message(f"📋 กดไอคอนคัดลอกที่มุมกล่องด้านล่างได้เลยค่ะ (มือถือกดค้างที่โค้ด):\n```\n{self.code}\n```", ephemeral=True)
+        await _send_code_copy_message(interaction, self.code)
 
 
 class GameCodeView(discord.ui.View):
@@ -2204,7 +2228,10 @@ class GameCodeResultView(GameCodeView):
         for idx, (code, _desc) in enumerate(codes[:10]):
             row = 1 + (idx // 5)  # แถว 1 และ 2
             self.add_item(CodeCopyButton(code, row))
-        back_btn = discord.ui.Button(label="ย้อนกลับ", style=discord.ButtonStyle.secondary, emoji="↩️", row=4)
+        back_btn = discord.ui.Button(
+            label="ย้อนกลับ", style=discord.ButtonStyle.secondary, emoji="↩️", row=4,
+            custom_id="game_code_back",
+        )
         back_btn.callback = self._back_callback
         self.add_item(back_btn)
 
@@ -2434,6 +2461,10 @@ async def on_ready():
             pass
     refresh_main_menu_msg = _refresh
     bot.add_view(DynamicGroupJoinView(role_id=0, emoji_str="🌸"))
+    # ลงทะเบียน view ระบบโค้ดเกมให้เป็น persistent (ใช้ empty codes list เพราะปุ่มเลือกเกม/
+    # ปุ่มแอดมิน/ปุ่มย้อนกลับใช้ custom_id ตายตัวอยู่แล้ว ไม่ต้องพึ่งพา instance เดิม)
+    # ส่วนปุ่มคัดลอกโค้ดแต่ละอันจะถูกดักจับแยกผ่าน on_interaction ด้านล่าง (ดูฟังก์ชัน on_interaction)
+    bot.add_view(GameCodeResultView([]))
     if not check_reminders.is_running():
         check_reminders.start()
     # ปิดระบบเช็คโค้ดใหม่อัตโนมัติจากเว็บไว้ก่อน (progameguides.com บล็อก IP ของ Render อยู่)
@@ -2446,6 +2477,27 @@ async def on_ready():
     except Exception as e:
         logger.warning(f"Slash command sync failed: {type(e).__name__}: {e}")
     logger.info(f"Doro COMPLETELY SUPER POWERED IS RUNNING AS {bot.user}")
+
+
+@bot.event
+async def on_interaction(interaction: discord.Interaction):
+    """ตัวดักจับสำรอง (raw event) สำหรับปุ่มคัดลอกโค้ด (custom_id ขึ้นต้นด้วย 'codecopy:')
+    ทำงานควบคู่กับ CodeCopyButton.callback ปกติ — ถ้า interaction ถูกตอบไปแล้ว
+    (เพราะมี view ใน memory จับได้อยู่แล้ว) จะข้ามไปเฉย ๆ ไม่ทำอะไรซ้ำ
+    แต่ถ้าบอทเพิ่งรีสตาร์ทมาแล้ว view เดิมหายไป (ไม่มี object ของข้อความเก่าจับ callback ได้)
+    ตัวนี้จะยังคงตอบให้ได้ เพราะโค้ดถูกเข้ารหัสอยู่ใน custom_id ของปุ่มเองอยู่แล้ว
+    """
+    if interaction.type != discord.InteractionType.component:
+        return
+    if interaction.response.is_done():
+        return
+    custom_id = (interaction.data or {}).get("custom_id", "")
+    if custom_id.startswith("codecopy:"):
+        code = custom_id[len("codecopy:"):]
+        try:
+            await _send_code_copy_message(interaction, code)
+        except Exception as e:
+            logger.warning(f"fallback codecopy interaction failed: {type(e).__name__}: {e}")
 
 
 @bot.tree.command(name="menu", description="เปิดแผงควบคุมระบบ UI ของน้อน Doro")
