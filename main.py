@@ -356,6 +356,20 @@ FFMPEG_OPTIONS = {
     'options': '-vn'
 }
 
+async def extract_song_info(query: str) -> dict:
+    """ค้นหาเพลงผ่าน yt_dlp โดยรันใน executor แยกต่างหาก
+    กัน event loop หลักของบอทค้าง (บล็อกทุกห้อง/ทุกคำสั่ง) ระหว่างรอผลค้นหา"""
+    def _extract():
+        with yt_dlp.YoutubeDL(YTDL_OPTIONS) as ytdl:
+            info = ytdl.extract_info(query, download=False)
+            if 'entries' in info:
+                entries = [e for e in info['entries'] if e]
+                if not entries:
+                    raise ValueError("no results")
+                info = entries[0]
+            return info
+    return await bot.loop.run_in_executor(None, _extract)
+
 def play_next_song(guild_id, vc, channel):
     if guild_id in loop_status and loop_status[guild_id] and guild_id in current_songs:
         song = current_songs[guild_id]
@@ -479,21 +493,19 @@ class MusicSearchModal(discord.ui.Modal, title="🎵 ค้นหาและเ
             return
         await interaction.channel.send(f"🔍 น้อน Doro กำลังดำน้ำไปงมหาเพลง **'{query}'** บน YouTube แป๊บน้าน้าา...", delete_after=5)
 
-        with yt_dlp.YoutubeDL(YTDL_OPTIONS) as ytdl:
-            try:
-                info = ytdl.extract_info(query, download=False)
-                if 'entries' in info: 
-                    info = info['entries'][0]
-                song_data = {
-                    'url': info['url'],
-                    'title': info['title'],
-                    'webpage_url': info['webpage_url'],
-                    'thumbnail': info.get('thumbnail'),
-                    'requester': interaction.user.display_name
-                }
-            except Exception as e:
-                await interaction.channel.send("❌ งื้อออ หนูหาเพลงนี้ไม่เจอหรือติดบล็อกจาก YouTube ค๊าา ลองเปลี่ยนชื่อเพลงดูน้าา", delete_after=5)
-                return
+        try:
+            info = await extract_song_info(query)
+            song_data = {
+                'url': info['url'],
+                'title': info['title'],
+                'webpage_url': info['webpage_url'],
+                'thumbnail': info.get('thumbnail'),
+                'requester': interaction.user.display_name
+            }
+        except Exception as e:
+            logger.warning(f"yt_dlp search failed: {type(e).__name__}: {e}")
+            await interaction.channel.send("❌ งื้อออ หนูหาเพลงนี้ไม่เจอหรือติดบล็อกจาก YouTube ค๊าา ลองเปลี่ยนชื่อเพลงดูน้าา", delete_after=5)
+            return
         guild_id = guild.id
         vc = guild.voice_client
         if not vc:
@@ -1468,11 +1480,14 @@ class RoleSelect(discord.ui.Select):
         await interaction.response.defer()
         role = interaction.guild.get_role(int(self.values[0]))
         if role:
-            try: 
+            try:
                 await interaction.user.add_roles(role)
                 await interaction.channel.send(f"✅ มอบยศ **{role.name}** ให้คุณเรียบร้อยค๊าา!", delete_after=5)
-            except: 
-                pass
+            except discord.Forbidden:
+                await interaction.channel.send("❌ น้อน Doro ไม่มีสิทธิ์มอบยศนี้ค๊าา รบกวนแอดมินลากยศของบอทให้สูงกว่ายศนี้น้าา", delete_after=8)
+            except Exception as e:
+                logger.warning(f"add_roles failed: {type(e).__name__}: {e}")
+                await interaction.channel.send("❌ งื้อออ มอบยศไม่สำเร็จค่ะ ลองใหม่อีกครั้งน้าา", delete_after=8)
 
 class TextInputModal(discord.ui.Modal, title="📝 ส่งเหตุผลอ้อน ๆ เพื่อขอยศพิเศษ"):
     def __init__(self):
@@ -1847,15 +1862,21 @@ class VoteProgressView(discord.ui.View):
         if interaction.user.id in self.voters or interaction.user.id == self.target.id: return
         self.voters.add(interaction.user.id)
         if len(self.voters) >= self.req:
-            try: 
+            try:
                 await interaction.message.delete()
-            except: 
+            except Exception:
                 pass
-            if self.k_type == "voice" and self.target.voice: 
-                await self.target.move_to(None)
-            elif self.k_type == "server": 
-                await self.target.kick()
-            await interaction.channel.send(f"🔨 ประชามติสำเร็จ! ดีด {self.target.mention} ปลิวเรียบร้อยค๊าา")
+            try:
+                if self.k_type == "voice" and self.target.voice:
+                    await self.target.move_to(None)
+                elif self.k_type == "server":
+                    await self.target.kick()
+                await interaction.channel.send(f"🔨 ประชามติสำเร็จ! ดีด {self.target.mention} ปลิวเรียบร้อยค๊าา")
+            except discord.Forbidden:
+                await interaction.channel.send(f"❌ โหวตผ่านแล้ว แต่น้อน Doro ไม่มีสิทธิ์ดีด {self.target.mention} ค่ะ (ยศบอทต่ำกว่ายศเป้าหมายหรือเปล่า?)")
+            except Exception as e:
+                logger.warning(f"vote-kick action failed: {type(e).__name__}: {e}")
+                await interaction.channel.send(f"❌ โหวตผ่านแล้ว แต่เกิดข้อผิดพลาดตอนดีด {self.target.mention} ค่ะ")
             self.stop()
         else: 
             await interaction.response.send_message(f"🟢 บันทึกแต้มโหวตแล้ว ({len(self.voters)}/{self.req})", ephemeral=True)
@@ -1888,18 +1909,24 @@ class MultiRoleManagementView(discord.ui.View):
         if not self.selected_role_id or not self.selected_members: return
         await interaction.response.defer()
         r = self.guild.get_role(self.selected_role_id)
+        success, failed = 0, 0
         for u in self.selected_members:
             m = self.guild.get_member(u.id)
-            if m: 
-                try: 
-                    await m.add_roles(r) 
-                except: 
-                    pass
-        try: 
+            if m:
+                try:
+                    await m.add_roles(r)
+                    success += 1
+                except Exception as e:
+                    failed += 1
+                    logger.warning(f"mass add_roles failed for {u.id}: {type(e).__name__}: {e}")
+        try:
             await interaction.message.delete()
-        except: 
+        except Exception:
             pass
-        await interaction.channel.send("🛡️ มอบยศกลุ่มความเร็วสูงเสร็จเรียบร้อยค๊าา!", delete_after=10)
+        summary = f"🛡️ มอบยศให้สำเร็จ {success} คนค๊าา!"
+        if failed:
+            summary += f" (ล้มเหลว {failed} คน — เช็คยศบอทหรือสิทธิ์อีกทีน้าา)"
+        await interaction.channel.send(summary, delete_after=10)
 
 # ==========================================
 # 🎮 ROBLOX GAME CODES (LIVE FETCH + MANUAL FALLBACK)
@@ -2664,10 +2691,22 @@ async def on_message(message: discord.Message):
 
     if (f"doro ลบข้อความ" in lower_msg or f"doro clear" in lower_msg) and len(parts) >= 3:
         if not message.author.guild_permissions.manage_messages: return
-        try: 
-            deleted = await message.channel.purge(limit=int(parts[2]) + 1)
-        except: 
-            pass
+        try:
+            amount = int(parts[2])
+        except ValueError:
+            await message.channel.send("❌ รูปแบบ: `doro ลบข้อความ <จำนวน>` ต้องเป็นตัวเลขค่ะ", delete_after=6)
+            return
+        if amount < 1 or amount > 100:
+            await message.channel.send("❌ กรุณาระบุจำนวนระหว่าง 1-100 ค่ะ", delete_after=6)
+            return
+        try:
+            deleted = await message.channel.purge(limit=amount + 1)
+            await message.channel.send(f"🧹 ลบข้อความไปแล้ว {len(deleted) - 1} ข้อความค่ะ", delete_after=5)
+        except discord.Forbidden:
+            await message.channel.send("❌ น้อน Doro ไม่มีสิทธิ์ลบข้อความในห้องนี้ค่ะ", delete_after=6)
+        except Exception as e:
+            logger.warning(f"purge failed: {type(e).__name__}: {e}")
+            await message.channel.send("❌ ลบข้อความไม่สำเร็จค่ะ ลองใหม่อีกครั้งน้าา", delete_after=6)
         return
 
     if lower_msg == "doro สร้างปุ่มรับยศ":
@@ -2691,20 +2730,18 @@ async def on_message(message: discord.Message):
         if not message.author.voice:
             return await message.channel.send("❌ คุณพี่ต้องเข้ามาอยู่ในห้องคุยเสียงก่อนสั่งหนูเปิดเพลงนะค๊าางึมมม")
         await message.channel.send(f"🔍 น้อน Doro กำลังดำน้ำไปงมหาเพลง **'{query}'** บน YouTube แป๊บน้าน้าา...", delete_after=5)
-        with yt_dlp.YoutubeDL(YTDL_OPTIONS) as ytdl:
-            try:
-                info = ytdl.extract_info(query, download=False)
-                if 'entries' in info: 
-                    info = info['entries'][0]
-                song_data = {
-                    'url': info['url'],
-                    'title': info['title'],
-                    'webpage_url': info['webpage_url'],
-                    'thumbnail': info.get('thumbnail'),
-                    'requester': message.author.display_name
-                }
-            except Exception as e:
-                return await message.channel.send("❌ งื้อออ หนูหาเพลงนี้ไม่เจอหรือติดบล็อกจาก YouTube ค๊าา ลองเปลี่ยนชื่อเพลงดูน้าา")
+        try:
+            info = await extract_song_info(query)
+            song_data = {
+                'url': info['url'],
+                'title': info['title'],
+                'webpage_url': info['webpage_url'],
+                'thumbnail': info.get('thumbnail'),
+                'requester': message.author.display_name
+            }
+        except Exception as e:
+            logger.warning(f"yt_dlp search failed: {type(e).__name__}: {e}")
+            return await message.channel.send("❌ งื้อออ หนูหาเพลงนี้ไม่เจอหรือติดบล็อกจาก YouTube ค๊าา ลองเปลี่ยนชื่อเพลงดูน้าา")
 
         guild_id = message.guild.id
         vc = message.guild.voice_client
