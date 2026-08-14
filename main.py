@@ -79,6 +79,7 @@ reminders_col = db["reminders"]          # _id: auto -> {user_id, channel_id, gu
 warnings_col = db["warnings"]            # _id: auto -> {guild_id, user_id, reason, moderator_id, timestamp}
 code_announce_col = db["code_announce"]  # _id: guild_id -> {channels: {game_key: channel_id}}
 known_codes_col = db["known_codes"]      # _id: game_key -> {codes: [code, ...]}  (global baseline สำหรับตรวจจับโค้ดใหม่)
+music_state_col = db["music_state"]      # _id: guild_id -> {queue: [...], current: {...}|None, loop: bool} (กันคิวเพลงหายตอนบอทรีสตาร์ท)
 
 intents = discord.Intents.default()
 intents.message_content = True
@@ -227,6 +228,47 @@ music_queues = {}
 current_songs = {} 
 loop_status = {}   
 
+# --- 💾 บันทึกสถานะคิวเพลงลง MongoDB กันหายตอนบอทรีสตาร์ท/deploy ใหม่ ---
+def _sanitize_song(song: dict) -> dict:
+    """ตัด 'url' (ลิงก์สตรีมตรงจาก YouTube ที่หมดอายุไว) ออกก่อนเก็บลง DB
+    เก็บไว้แค่ข้อมูลที่พอจะค้นหา/ดึงลิงก์เล่นใหม่ได้ตอนถึงคิว"""
+    return {
+        "title": song.get("title"),
+        "webpage_url": song.get("webpage_url"),
+        "thumbnail": song.get("thumbnail"),
+        "requester": song.get("requester"),
+    }
+
+async def save_music_state(guild_id: int):
+    queue_ref = [_sanitize_song(s) for s in music_queues.get(guild_id, [])]
+    current = current_songs.get(guild_id)
+    current_ref = _sanitize_song(current) if current else None
+    if not queue_ref and not current_ref:
+        await music_state_col.delete_one({"_id": guild_id})
+        return
+    await music_state_col.update_one(
+        {"_id": guild_id},
+        {"$set": {"queue": queue_ref, "current": current_ref, "loop": loop_status.get(guild_id, False)}},
+        upsert=True,
+    )
+
+async def load_music_state():
+    """โหลดคิวเพลง/เพลงที่ค้างเล่นอยู่จาก MongoDB กลับเข้าหน่วยความจำตอนบอทเริ่มทำงาน
+    หมายเหตุ: จะไม่ auto-join ห้องเสียงหรือเล่นเพลงต่อให้อัตโนมัติ (ไม่รู้ว่าห้องเสียงเดิมคือห้องไหน/ยังมีคนอยู่ไหม)
+    เพลงที่ค้างจะถูกดันกลับไปเป็นคิวลำดับแรก พอมีคนสั่ง 'doro เล่น' เพลงใหม่ครั้งต่อไป ระบบจะต่อคิวให้เอง"""
+    async for doc in music_state_col.find():
+        guild_id = doc["_id"]
+        queue = list(doc.get("queue") or [])
+        current = doc.get("current")
+        if current:
+            queue = [current] + queue
+        if queue:
+            music_queues[guild_id] = queue
+        if doc.get("loop"):
+            loop_status[guild_id] = True
+    if music_queues:
+        logger.info(f"โหลดคิวเพลงค้างจาก MongoDB กลับมาแล้วสำหรับ {len(music_queues)} เซิร์ฟเวอร์")
+
 # ==========================================
 # ⚙️ CONFIG HELPERS (เก็บถาวรใน MongoDB Atlas — ไม่หายเมื่อบอทรีสตาร์ท/deploy ใหม่)
 # ==========================================
@@ -371,21 +413,42 @@ async def extract_song_info(query: str) -> dict:
     return await bot.loop.run_in_executor(None, _extract)
 
 def play_next_song(guild_id, vc, channel):
-    if guild_id in loop_status and loop_status[guild_id] and guild_id in current_songs:
+    # เรียกจาก callback 'after=' ของ discord.py ซึ่งรันในเธรดอื่น ไม่ใช่ event loop หลัก
+    # จึงต้องส่งงานเข้า event loop ผ่าน run_coroutine_threadsafe แทนการ await ตรงๆ
+    asyncio.run_coroutine_threadsafe(_play_next_song_async(guild_id, vc, channel), bot.loop)
+
+async def _play_next_song_async(guild_id, vc, channel):
+    if loop_status.get(guild_id) and guild_id in current_songs:
         song = current_songs[guild_id]
-    elif guild_id in music_queues and len(music_queues[guild_id]) > 0:
+    elif music_queues.get(guild_id):
         song = music_queues[guild_id].pop(0)
         current_songs[guild_id] = song
     else:
-        if guild_id in current_songs: 
-            del current_songs[guild_id]
-        asyncio.run_coroutine_threadsafe(vc.disconnect(), bot.loop)
-        asyncio.run_coroutine_threadsafe(channel.send("🎵 คิวเพลงหมดแล้ว หนูขอตัวออกจากห้องเสียงก่อนนะค๊าา~"), bot.loop)
+        current_songs.pop(guild_id, None)
+        await save_music_state(guild_id)
+        try:
+            await vc.disconnect()
+        except Exception as e:
+            logger.warning(f"vc.disconnect failed: {type(e).__name__}: {e}")
+        await channel.send("🎵 คิวเพลงหมดแล้ว หนูขอตัวออกจากห้องเสียงก่อนนะค๊าา~")
         return
+
+    # เพลงที่ค้างคิวมานาน (หรือเพิ่งโหลดกลับมาจาก MongoDB หลังบอทรีสตาร์ท) จะไม่มีลิงก์สตรีมตรงติดมา
+    # เพราะลิงก์จาก YouTube หมดอายุไว — ต้องไปดึงลิงก์เล่นใหม่จาก webpage_url ก่อนเล่นเสมอ
+    if not song.get('url'):
+        try:
+            info = await extract_song_info(song['webpage_url'])
+            song['url'] = info['url']
+        except Exception as e:
+            logger.warning(f"refresh stream url failed for '{song.get('title')}': {type(e).__name__}: {e}")
+            await channel.send(f"❌ เปิดเพลง **{song.get('title', '?')}** ไม่ได้ค่ะ (ลิงก์หมดอายุหรือหาไม่เจอ) ข้ามไปเพลงถัดไปน้าา")
+            current_songs.pop(guild_id, None)
+            return await _play_next_song_async(guild_id, vc, channel)
 
     source = discord.FFmpegPCMAudio(song['url'], **FFMPEG_OPTIONS)
     vc.play(source, after=lambda e: play_next_song(guild_id, vc, channel))
-    asyncio.run_coroutine_threadsafe(refresh_main_menu_msg(guild_id, channel), bot.loop)
+    await save_music_state(guild_id)
+    await refresh_main_menu_msg(guild_id, channel)
 
 async def refresh_main_menu_msg(guild_id, channel):
     pass
@@ -514,11 +577,13 @@ class MusicSearchModal(discord.ui.Modal, title="🎵 ค้นหาและเ
             music_queues[guild_id] = []
         if vc.is_playing() or vc.is_paused():
             music_queues[guild_id].append(song_data)
+            await save_music_state(guild_id)
             await interaction.channel.send(f"📋 เพิ่มเพลง **{song_data['title']}** เข้าสู่คิวเรียบร้อยแล้วค๊าา!", delete_after=5)
         else:
             current_songs[guild_id] = song_data
             source = discord.FFmpegPCMAudio(song_data['url'], **FFMPEG_OPTIONS)
             vc.play(source, after=lambda e: play_next_song(guild_id, vc, interaction.channel))
+            await save_music_state(guild_id)
 
         target_msg = self.current_msg if self.current_msg else interaction.message
 
@@ -1183,6 +1248,8 @@ class MusicControlView(discord.ui.View):
         music_queues[guild_id] = []
         if guild_id in current_songs: 
             del current_songs[guild_id]
+        loop_status[guild_id] = False
+        await save_music_state(guild_id)
         if vc: 
             await vc.disconnect()
         await interaction.channel.send("⏹️ เคลียร์คิวเพลงเกลี้ยงแผงเรียบร้อยค๊าา!", delete_after=3)
@@ -2487,6 +2554,10 @@ async def on_ready():
         except:
             pass
     refresh_main_menu_msg = _refresh
+    try:
+        await load_music_state()
+    except Exception as e:
+        logger.warning(f"load_music_state failed: {type(e).__name__}: {e}")
     bot.add_view(DynamicGroupJoinView(role_id=0, emoji_str="🌸"))
     # ลงทะเบียน view ระบบโค้ดเกมให้เป็น persistent (ใช้ empty codes list เพราะปุ่มเลือกเกม/
     # ปุ่มแอดมิน/ปุ่มย้อนกลับใช้ custom_id ตายตัวอยู่แล้ว ไม่ต้องพึ่งพา instance เดิม)
@@ -2752,11 +2823,13 @@ async def on_message(message: discord.Message):
             music_queues[guild_id] = []
         if vc.is_playing() or vc.is_paused():
             music_queues[guild_id].append(song_data)
+            await save_music_state(guild_id)
             await message.channel.send(f"📋 เพิ่มเพลง **{song_data['title']}** เข้าสู่คิวเรียบร้อยแล้วค๊าา!", delete_after=5)
         else:
             current_songs[guild_id] = song_data
             source = discord.FFmpegPCMAudio(song_data['url'], **FFMPEG_OPTIONS)
             vc.play(source, after=lambda e: play_next_song(guild_id, vc, message.channel))
+            await save_music_state(guild_id)
             await message.channel.send(embed=generate_main_menu_embed(message.guild), view=MusicControlView(message.guild))
         return
 
