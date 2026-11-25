@@ -21,11 +21,32 @@ from datetime import datetime, timedelta, timezone
 from discord.ext import commands, tasks
 from dotenv import load_dotenv
 from youtubesearchpython import VideosSearch
-from google import genai
-from google.genai import types
 
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
-gemini_client = genai.Client(api_key=GEMINI_API_KEY) if GEMINI_API_KEY else None
+# ==========================================
+# 🤖 AI (Groq - OpenAI-compatible API)
+# ==========================================
+GROQ_API_KEY = os.getenv("GROQ_API_KEY")
+GROQ_MODEL = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
+
+async def ask_llm(prompt: str, system: str | None = None) -> str:
+    if not GROQ_API_KEY:
+        raise RuntimeError("GROQ_API_KEY is not set")
+    messages = []
+    if system:
+        messages.append({"role": "system", "content": system})
+    messages.append({"role": "user", "content": prompt})
+    async with aiohttp.ClientSession() as session:
+        async with session.post(
+            "https://api.groq.com/openai/v1/chat/completions",
+            headers={"Authorization": f"Bearer {GROQ_API_KEY}"},
+            json={"model": GROQ_MODEL, "messages": messages},
+            timeout=aiohttp.ClientTimeout(total=60),
+        ) as resp:
+            data = await resp.json()
+            if resp.status != 200:
+                err = data.get("error", {}) if isinstance(data, dict) else {}
+                raise RuntimeError(f"Groq API {resp.status}: {err.get('message', data)}")
+            return (data["choices"][0]["message"]["content"] or "").strip()
 # ==========================================
 # 🌐 WEB SERVER FOR RENDER
 # ==========================================
@@ -2854,20 +2875,16 @@ async def on_message(message: discord.Message):
 @bot.tree.command(name="ask", description="ถามคำถามหรือคุยกับ Doro AI")
 @app_commands.describe(question="คำถามหรือข้อความที่อยากคุยกับ AI")
 async def ask_ai(interaction: discord.Interaction, question: str):
-    if not gemini_client:
-        return await interaction.response.send_message("❌ ยังไม่ได้ตั้งค่า `GEMINI_API_KEY` ในระบบค่ะ", ephemeral=True)
+    if not GROQ_API_KEY:
+        return await interaction.response.send_message("❌ ยังไม่ได้ตั้งค่า `GROQ_API_KEY` ในระบบค่ะ", ephemeral=True)
 
     await interaction.response.defer(thinking=True)
 
     try:
-        response = await gemini_client.aio.models.generate_content(
-            model="gemini-2.5-flash",
-            contents=question,
-            config=types.GenerateContentConfig(
-                system_instruction="คุณคือบอท Discord ชื่อ Doro ตอบคำถามเป็นภาษาไทยอย่างเป็นกันเอง กระชับ เข้าใจง่าย และเป็นประโยชน์"
-            )
-        )
-        answer = response.text or "ขอโทษค่ะ Doro คิดคำตอบไม่ออก ลองถามใหม่อีกครั้งนะ"
+        answer = await ask_llm(
+            question,
+            system="คุณคือบอท Discord ชื่อ Doro ตอบคำถามเป็นภาษาไทยอย่างเป็นกันเอง กระชับ เข้าใจง่าย และเป็นประโยชน์",
+        ) or "ขอโทษค่ะ Doro คิดคำตอบไม่ออก ลองถามใหม่อีกครั้งนะ"
 
         if len(answer) <= 1900:
             await interaction.followup.send(f"**คำถาม:** {question}\n\n{answer}")
@@ -2884,8 +2901,8 @@ async def ask_ai(interaction: discord.Interaction, question: str):
 @bot.tree.command(name="summarize", description="ให้ Doro AI ช่วยสรุปแชทล่าสุดในห้องนี้")
 @app_commands.describe(limit="จำนวนข้อความล่าสุดที่จะให้สรุป (ค่าเริ่มต้น 30, สูงสุด 100)")
 async def summarize_chat(interaction: discord.Interaction, limit: app_commands.Range[int, 5, 100] = 30):
-    if not gemini_client:
-        return await interaction.response.send_message("❌ ยังไม่ได้ตั้งค่า `GEMINI_API_KEY` ในระบบค่ะ", ephemeral=True)
+    if not GROQ_API_KEY:
+        return await interaction.response.send_message("❌ ยังไม่ได้ตั้งค่า `GROQ_API_KEY` ในระบบค่ะ", ephemeral=True)
 
     await interaction.response.defer(thinking=True)
 
@@ -2901,14 +2918,11 @@ async def summarize_chat(interaction: discord.Interaction, limit: app_commands.R
         messages.reverse()
         chat_log = "\n".join(messages)
 
-        response = await gemini_client.aio.models.generate_content(
-            model="gemini-2.5-flash",
-            contents=f"ช่วยสรุปบทสนทนาต่อไปนี้เป็นข้อๆ สั้นๆ เข้าใจง่ายเป็นภาษาไทย:\n\n{chat_log}"
-        )
+        summary = await ask_llm(f"ช่วยสรุปบทสนทนาต่อไปนี้เป็นข้อๆ สั้นๆ เข้าใจง่ายเป็นภาษาไทย:\n\n{chat_log}")
 
         embed = discord.Embed(
             title=f"📝 สรุปแชทล่าสุด ({len(messages)} ข้อความ)",
-            description=response.text[:4000] if response.text else "ไม่สามารถสรุปได้",
+            description=summary[:4000] if summary else "ไม่สามารถสรุปได้",
             color=discord.Color.blue()
         )
         await interaction.followup.send(embed=embed)
