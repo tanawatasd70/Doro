@@ -20,7 +20,11 @@ from datetime import datetime, timedelta, timezone
 from discord.ext import commands, tasks
 from dotenv import load_dotenv
 from youtubesearchpython import VideosSearch
+from google import genai
+from google.genai import types
 
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+gemini_client = genai.Client(api_key=GEMINI_API_KEY) if GEMINI_API_KEY else None
 # ==========================================
 # 🌐 WEB SERVER FOR RENDER
 # ==========================================
