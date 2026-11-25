@@ -26,9 +26,31 @@ from youtubesearchpython import VideosSearch
 # 🤖 AI (Groq - OpenAI-compatible API)
 # ==========================================
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
-GROQ_MODEL = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
+GROQ_MODEL = os.getenv("GROQ_MODEL", "openai/gpt-oss-120b")
+GROQ_URL = "https://api.groq.com/openai/v1"
+# ลำดับโมเดลที่เลือกให้อัตโนมัติ ถ้าชื่อโมเดลที่ตั้งไว้ใช้ไม่ได้ (404)
+GROQ_PREFERRED = ["openai/gpt-oss-120b", "openai/gpt-oss-20b", "qwen/qwen3-32b",
+                  "llama-3.3-70b-versatile", "llama-3.1-8b-instant"]
+GROQ_SKIP = ("whisper", "orpheus", "guard", "tts", "safeguard", "embed", "compound")
+
+async def _groq_pick_model(session) -> str | None:
+    async with session.get(
+        f"{GROQ_URL}/models",
+        headers={"Authorization": f"Bearer {GROQ_API_KEY}"},
+        timeout=aiohttp.ClientTimeout(total=30),
+    ) as r:
+        if r.status != 200:
+            return None
+        payload = await r.json()
+    ids = [m.get("id", "") for m in payload.get("data", [])]
+    ids = [i for i in ids if i and not any(s in i.lower() for s in GROQ_SKIP)]
+    for pref in GROQ_PREFERRED:
+        if pref in ids:
+            return pref
+    return ids[0] if ids else None
 
 async def ask_llm(prompt: str, system: str | None = None) -> str:
+    global GROQ_MODEL
     if not GROQ_API_KEY:
         raise RuntimeError("GROQ_API_KEY is not set")
     messages = []
@@ -36,17 +58,26 @@ async def ask_llm(prompt: str, system: str | None = None) -> str:
         messages.append({"role": "system", "content": system})
     messages.append({"role": "user", "content": prompt})
     async with aiohttp.ClientSession() as session:
-        async with session.post(
-            "https://api.groq.com/openai/v1/chat/completions",
-            headers={"Authorization": f"Bearer {GROQ_API_KEY}"},
-            json={"model": GROQ_MODEL, "messages": messages},
-            timeout=aiohttp.ClientTimeout(total=60),
-        ) as resp:
-            data = await resp.json()
-            if resp.status != 200:
-                err = data.get("error", {}) if isinstance(data, dict) else {}
-                raise RuntimeError(f"Groq API {resp.status}: {err.get('message', data)}")
-            return (data["choices"][0]["message"]["content"] or "").strip()
+        for attempt in range(2):
+            async with session.post(
+                f"{GROQ_URL}/chat/completions",
+                headers={"Authorization": f"Bearer {GROQ_API_KEY}"},
+                json={"model": GROQ_MODEL, "messages": messages},
+                timeout=aiohttp.ClientTimeout(total=60),
+            ) as resp:
+                data = await resp.json()
+                if resp.status == 404 and attempt == 0:
+                    new_model = await _groq_pick_model(session)
+                    if new_model and new_model != GROQ_MODEL:
+                        logger.warning(f"Groq model {GROQ_MODEL} not found, switching to {new_model}")
+                        GROQ_MODEL = new_model
+                        continue
+                if resp.status != 200:
+                    err = data.get("error", {}) if isinstance(data, dict) else {}
+                    raise RuntimeError(f"Groq API {resp.status}: {err.get('message', data)}")
+                text = (data["choices"][0]["message"].get("content") or "")
+                return re.sub(r"<think>.*?</think>", "", text, flags=re.S).strip()
+    raise RuntimeError("Groq API: no response")
 # ==========================================
 # 🌐 WEB SERVER FOR RENDER
 # ==========================================
