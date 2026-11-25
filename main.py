@@ -43,7 +43,7 @@ def run_server():
     app.run(host='0.0.0.0', port=port)
 
 def server_on():
-    t = Thread(target=run_server)
+    t = Thread(target=run_server, daemon=True)
     t.start()
 
 server_on()
@@ -2290,7 +2290,7 @@ class GameCodeView(discord.ui.View):
         super().__init__(timeout=None)
         self.add_item(GameCodeSelect())
 
-    @discord.ui.button(label="เพิ่มโค้ด", style=discord.ButtonStyle.success, emoji="➕", row=3)
+    @discord.ui.button(label="เพิ่มโค้ด", style=discord.ButtonStyle.success, emoji="➕", row=3, custom_id="game_code_add")
     async def add_code_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
         if not interaction.user.guild_permissions.manage_guild:
             return await interaction.response.send_message("❌ ต้องมีสิทธิ์ Manage Server ถึงจะเพิ่มโค้ดได้ค่ะ", ephemeral=True)
@@ -2298,7 +2298,7 @@ class GameCodeView(discord.ui.View):
             "เลือกเกมที่จะเพิ่มโค้ดให้ค่ะ:", view=AddCodeAdminView(), ephemeral=True
         )
 
-    @discord.ui.button(label="ลบโค้ด", style=discord.ButtonStyle.danger, emoji="🗑️", row=3)
+    @discord.ui.button(label="ลบโค้ด", style=discord.ButtonStyle.danger, emoji="🗑️", row=3, custom_id="game_code_remove")
     async def remove_code_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
         if not interaction.user.guild_permissions.manage_guild:
             return await interaction.response.send_message("❌ ต้องมีสิทธิ์ Manage Server ถึงจะลบโค้ดได้ค่ะ", ephemeral=True)
@@ -2306,7 +2306,7 @@ class GameCodeView(discord.ui.View):
             "เลือกเกมที่จะลบโค้ดออกค่ะ:", view=RemoveCodeAdminView(), ephemeral=True
         )
 
-    @discord.ui.button(label="ตั้งห้องประกาศโค้ดใหม่", style=discord.ButtonStyle.secondary, emoji="📢", row=3)
+    @discord.ui.button(label="ตั้งห้องประกาศโค้ดใหม่", style=discord.ButtonStyle.secondary, emoji="📢", row=3, custom_id="game_code_announce")
     async def announce_setup_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
         if not interaction.user.guild_permissions.manage_guild:
             return await interaction.response.send_message("❌ ต้องมีสิทธิ์ Manage Server ถึงจะตั้งค่านี้ได้ค่ะ", ephemeral=True)
@@ -2314,7 +2314,7 @@ class GameCodeView(discord.ui.View):
             "ตั้งค่าห้องประกาศเมื่อมีโค้ดใหม่ออกได้ที่นี่ค่ะ:", view=CodeAnnounceConfigView(interaction.guild), ephemeral=True
         )
 
-    @discord.ui.button(label="ปิด", style=discord.ButtonStyle.danger, emoji="❌", row=4)
+    @discord.ui.button(label="ปิด", style=discord.ButtonStyle.danger, emoji="❌", row=4, custom_id="game_code_close")
     async def close_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
         await _close_ui_message(interaction)
 
