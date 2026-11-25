@@ -6,6 +6,7 @@ import asyncio
 import pytz
 import logging
 import discord
+from discord import app_commands
 import yt_dlp
 import aiohttp
 try:
